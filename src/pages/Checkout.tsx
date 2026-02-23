@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, CreditCard, Wallet, Truck, ShieldCheck, Check, Loader2 } from "lucide-react";
+import { ChevronLeft, Smartphone, Wallet, Truck, ShieldCheck, Check, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -11,15 +11,46 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
-import { useRazorpay } from "@/hooks/useRazorpay";
+import { usePhonePe } from "@/hooks/usePhonePe";
 import { useCreateOrder } from "@/hooks/useOrders";
+import { getPhonePePendingOrderStorageKey } from "@/lib/phonepe";
+import { useStoreSettings } from "@/hooks/useStoreSettings";
+import { PhonePeMode } from "@/lib/store-settings";
+
+interface PendingPhonePeOrderPayload {
+  orderData: {
+    order_number: string;
+    payment_method: string;
+    payment_status: string;
+    subtotal: number;
+    shipping_cost: number;
+    total: number;
+    shipping_address: {
+      full_name: string;
+      phone: string;
+      address_line1: string;
+      city: string;
+      state: string;
+      pincode: string;
+    };
+    items: {
+      product_id: string;
+      product_name: string;
+      product_image: string;
+      quantity: number;
+      price: number;
+    }[];
+  };
+  phonepeMode: PhonePeMode;
+}
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useCart();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { initiatePayment, isLoading: isRazorpayLoading } = useRazorpay();
+  const { initiatePayment, isLoading: isPhonePeLoading } = usePhonePe();
   const createOrder = useCreateOrder();
+  const { data: storeSettings } = useStoreSettings();
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("cod");
@@ -34,8 +65,32 @@ const Checkout = () => {
     pincode: "",
   });
 
-  const shipping = subtotal >= 999 ? 0 : 99;
+  const shippingThreshold = storeSettings?.free_shipping_threshold ?? 999;
+  const shippingCost = storeSettings?.shipping_cost ?? 99;
+  const shipping = subtotal >= shippingThreshold ? 0 : shippingCost;
   const total = subtotal + shipping;
+  const codEnabled = storeSettings?.cod_enabled ?? true;
+  const phonePeEnabled = storeSettings?.phonepe_enabled ?? true;
+  const noPaymentMethodEnabled = !codEnabled && !phonePeEnabled;
+
+  useEffect(() => {
+    if (paymentMethod === "cod" && !codEnabled && phonePeEnabled) {
+      setPaymentMethod("phonepe");
+      return;
+    }
+
+    if (paymentMethod === "phonepe" && !phonePeEnabled && codEnabled) {
+      setPaymentMethod("cod");
+    }
+  }, [codEnabled, phonePeEnabled, paymentMethod]);
+
+  const addMoreForFreeShipping = useMemo(() => {
+    if (shipping === 0) {
+      return 0;
+    }
+
+    return Math.max(0, shippingThreshold - subtotal);
+  }, [shipping, shippingThreshold, subtotal]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -57,14 +112,41 @@ const Checkout = () => {
       return;
     }
 
+    if (noPaymentMethodEnabled) {
+      toast({
+        title: "Payment Unavailable",
+        description: "No payment method is currently enabled. Please contact support.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (paymentMethod === "cod" && !codEnabled) {
+      toast({
+        title: "COD Disabled",
+        description: "Cash on Delivery is currently disabled by admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (paymentMethod === "phonepe" && !phonePeEnabled) {
+      toast({
+        title: "Online Payment Disabled",
+        description: "Online payment is currently disabled by admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsProcessing(true);
 
     const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
     
     const orderData = {
       order_number: orderNumber,
-      payment_method: paymentMethod === "online" ? "razorpay" : "cod",
-      payment_status: paymentMethod === "online" ? "pending" : "pending",
+      payment_method: paymentMethod === "phonepe" ? "phonepe" : "cod",
+      payment_status: "pending",
       subtotal,
       shipping_cost: shipping,
       total,
@@ -86,36 +168,55 @@ const Checkout = () => {
     };
 
     try {
-      if (paymentMethod === "online") {
-        // Use Razorpay for online payment
+      if (paymentMethod === "phonepe") {
+        const pendingOrderKey = getPhonePePendingOrderStorageKey(orderNumber);
+        const phonepeMode = storeSettings?.phonepe_mode ?? "sandbox";
+        const pendingPayload: PendingPhonePeOrderPayload = {
+          orderData,
+          phonepeMode,
+        };
+        localStorage.setItem(pendingOrderKey, JSON.stringify(pendingPayload));
+
         await initiatePayment({
-          amount: total,
-          orderId: orderNumber,
-          customerName: `${formData.firstName} ${formData.lastName}`,
-          customerEmail: formData.email,
-          customerPhone: formData.phone,
+          merchantOrderId: orderNumber,
+          amount: Math.round(total * 100),
+          redirectUrl: `${window.location.origin}/phonepe-return?merchantOrderId=${encodeURIComponent(orderNumber)}`,
+          phonepeMode,
+          checkoutFlowType: storeSettings?.phonepe_checkout_flow ?? "IFRAME",
+          checkoutScriptUrl: storeSettings?.phonepe_checkout_script_url,
           onSuccess: async () => {
             try {
               await createOrder.mutateAsync({
                 ...orderData,
                 payment_status: "paid",
               });
+              localStorage.removeItem(pendingOrderKey);
               clearCart();
               navigate("/order-success");
             } catch (error) {
               console.error("Error creating order:", error);
               toast({
                 title: "Order Error",
-                description: "Payment successful but failed to save order. Please contact support.",
+                description: `Payment successful but failed to save order. Please contact support with order ID: ${orderNumber}.`,
                 variant: "destructive",
               });
             }
             setIsProcessing(false);
           },
-          onFailure: () => {
+          onFailure: (error) => {
+            localStorage.removeItem(pendingOrderKey);
             setIsProcessing(false);
+            toast({
+              title: "Payment Failed",
+              description: error.message || "PhonePe payment failed. Please try again.",
+              variant: "destructive",
+            });
           },
         });
+        if ((storeSettings?.phonepe_checkout_flow ?? "IFRAME") === "REDIRECT") {
+          setIsProcessing(false);
+        }
+        return;
       } else {
         // Cash on Delivery - create order directly
         await createOrder.mutateAsync(orderData);
@@ -130,12 +231,13 @@ const Checkout = () => {
         
         navigate("/order-success");
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error placing order:", error);
       setIsProcessing(false);
+      const errorMessage = error instanceof Error ? error.message : "Failed to place order. Please try again.";
       toast({
         title: "Order Failed",
-        description: error.message || "Failed to place order. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -179,7 +281,7 @@ const Checkout = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
             {/* Left - Form */}
             <div className="lg:col-span-2">
-              <form onSubmit={handlePlaceOrder} className="space-y-8">
+              <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-8">
                 {/* Contact Information */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -309,36 +411,46 @@ const Checkout = () => {
                   <h2 className="font-display text-xl font-semibold text-foreground mb-6">
                     Payment Method
                   </h2>
+                  {noPaymentMethodEnabled && (
+                    <p className="text-sm text-destructive mb-4">
+                      Admin ne abhi sab payment methods disable kiye hue hain.
+                    </p>
+                  )}
                   <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
-                    <div className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-colors cursor-pointer ${paymentMethod === "cod" ? "border-primary bg-primary/5" : "border-border"}`}>
-                      <RadioGroupItem value="cod" id="cod" />
-                      <Label htmlFor="cod" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-3">
-                          <Wallet className="text-primary" size={24} />
-                          <div>
-                            <p className="font-medium text-foreground">Cash on Delivery</p>
-                            <p className="text-sm text-muted-foreground">Pay when you receive</p>
+                    {codEnabled && (
+                      <div className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-colors cursor-pointer ${paymentMethod === "cod" ? "border-primary bg-primary/5" : "border-border"}`}>
+                        <RadioGroupItem value="cod" id="cod" />
+                        <Label htmlFor="cod" className="flex-1 cursor-pointer">
+                          <div className="flex items-center gap-3">
+                            <Wallet className="text-primary" size={24} />
+                            <div>
+                              <p className="font-medium text-foreground">Cash on Delivery</p>
+                              <p className="text-sm text-muted-foreground">Pay when you receive</p>
+                            </div>
                           </div>
-                        </div>
-                      </Label>
-                    </div>
-                    <div className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-colors cursor-pointer ${paymentMethod === "online" ? "border-primary bg-primary/5" : "border-border"}`}>
-                      <RadioGroupItem value="online" id="online" />
-                      <Label htmlFor="online" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-3">
-                          <CreditCard className="text-primary" size={24} />
-                          <div>
-                            <p className="font-medium text-foreground">Pay Online (Razorpay)</p>
-                            <p className="text-sm text-muted-foreground">UPI, Cards, Net Banking, Wallets</p>
+                        </Label>
+                      </div>
+                    )}
+                    {phonePeEnabled && (
+                      <div className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-colors cursor-pointer ${paymentMethod === "phonepe" ? "border-primary bg-primary/5" : "border-border"}`}>
+                        <RadioGroupItem value="phonepe" id="phonepe" />
+                        <Label htmlFor="phonepe" className="flex-1 cursor-pointer">
+                          <div className="flex items-center gap-3">
+                            <Smartphone className="text-primary" size={24} />
+                            <div>
+                              <p className="font-medium text-foreground">Pay Online (PhonePe)</p>
+                              <p className="text-sm text-muted-foreground">
+                                {storeSettings?.phonepe_enabled_payment_modes?.join(", ").replaceAll("_", " ") ||
+                                  "UPI, Cards, Net Banking"}
+                              </p>
+                            </div>
+                            <span className="ml-auto text-xs font-semibold text-primary">
+                              {storeSettings?.phonepe_mode === "production" ? "PHONEPE LIVE" : "PHONEPE TEST"}
+                            </span>
                           </div>
-                          <img 
-                            src="https://razorpay.com/assets/razorpay-logo.svg" 
-                            alt="Razorpay" 
-                            className="h-5 ml-auto opacity-60"
-                          />
-                        </div>
-                      </Label>
-                    </div>
+                        </Label>
+                      </div>
+                    )}
                   </RadioGroup>
                 </motion.div>
 
@@ -349,14 +461,14 @@ const Checkout = () => {
                     variant="sacred" 
                     size="lg" 
                     className="w-full"
-                    disabled={isProcessing || isRazorpayLoading}
+                    disabled={isProcessing || isPhonePeLoading || noPaymentMethodEnabled}
                   >
-                    {isProcessing || isRazorpayLoading ? (
+                    {isProcessing || isPhonePeLoading ? (
                       <>
                         <Loader2 size={18} className="animate-spin mr-2" />
                         Processing...
                       </>
-                    ) : paymentMethod === "online" ? (
+                    ) : paymentMethod === "phonepe" ? (
                       `Pay ₹${total.toLocaleString()}`
                     ) : (
                       `Place Order • ₹${total.toLocaleString()}`
@@ -412,7 +524,7 @@ const Checkout = () => {
                   </div>
                   {shipping > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      Add ₹{(999 - subtotal).toLocaleString()} more for free shipping
+                      Add ₹{addMoreForFreeShipping.toLocaleString()} more for free shipping
                     </p>
                   )}
                 </div>
@@ -433,15 +545,14 @@ const Checkout = () => {
                   variant="sacred" 
                   size="lg" 
                   className="w-full hidden lg:flex"
-                  disabled={isProcessing || isRazorpayLoading}
-                  onClick={handlePlaceOrder}
+                  disabled={isProcessing || isPhonePeLoading || noPaymentMethodEnabled}
                 >
-                  {isProcessing || isRazorpayLoading ? (
+                  {isProcessing || isPhonePeLoading ? (
                     <>
                       <Loader2 size={18} className="animate-spin mr-2" />
                       Processing...
                     </>
-                  ) : paymentMethod === "online" ? (
+                  ) : paymentMethod === "phonepe" ? (
                     `Pay ₹${total.toLocaleString()}`
                   ) : (
                     "Place Order"

@@ -269,6 +269,72 @@ export type Database = {
         }
         Relationships: []
       }
+      store_settings: {
+        Row: {
+          address: string
+          cod_enabled: boolean
+          created_at: string
+          email: string
+          free_shipping_threshold: number
+          id: number
+          phone: string
+          phonepe_checkout_flow: string
+          phonepe_checkout_script_url: string
+          phonepe_disable_payment_retry: boolean
+          phonepe_enabled: boolean
+          phonepe_enabled_payment_modes: string[]
+          phonepe_mode: string
+          shipping_cost: number
+          store_name: string
+          tagline: string
+          updated_at: string
+          updated_by: string | null
+          whatsapp_number: string
+        }
+        Insert: {
+          address?: string
+          cod_enabled?: boolean
+          created_at?: string
+          email?: string
+          free_shipping_threshold?: number
+          id?: number
+          phone?: string
+          phonepe_checkout_flow?: string
+          phonepe_checkout_script_url?: string
+          phonepe_disable_payment_retry?: boolean
+          phonepe_enabled?: boolean
+          phonepe_enabled_payment_modes?: string[]
+          phonepe_mode?: string
+          shipping_cost?: number
+          store_name?: string
+          tagline?: string
+          updated_at?: string
+          updated_by?: string | null
+          whatsapp_number?: string
+        }
+        Update: {
+          address?: string
+          cod_enabled?: boolean
+          created_at?: string
+          email?: string
+          free_shipping_threshold?: number
+          id?: number
+          phone?: string
+          phonepe_checkout_flow?: string
+          phonepe_checkout_script_url?: string
+          phonepe_disable_payment_retry?: boolean
+          phonepe_enabled?: boolean
+          phonepe_enabled_payment_modes?: string[]
+          phonepe_mode?: string
+          shipping_cost?: number
+          store_name?: string
+          tagline?: string
+          updated_at?: string
+          updated_by?: string | null
+          whatsapp_number?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           badge: string | null
