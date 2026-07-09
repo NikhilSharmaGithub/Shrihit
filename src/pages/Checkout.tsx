@@ -16,6 +16,7 @@ import { useCreateOrder } from "@/hooks/useOrders";
 import { getPhonePePendingOrderStorageKey } from "@/lib/phonepe";
 import { useStoreSettings } from "@/hooks/useStoreSettings";
 import { PhonePeMode, PhonePePaymentMode } from "@/lib/store-settings";
+import { supabase } from "@/integrations/supabase/client";
 
 const PHONEPE_PAYMENT_MODE_LABELS: Record<PhonePePaymentMode, string> = {
   UPI_INTENT: "Google Pay, PhonePe, Paytm & more",
@@ -156,6 +157,22 @@ const Checkout = () => {
     }
 
     setIsProcessing(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) {
+      const { error: anonError } = await supabase.auth.signInAnonymously();
+      if (anonError) {
+        setIsProcessing(false);
+        toast({
+          title: "Order Error",
+          description: "Could not start a checkout session. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
 
     const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
     
