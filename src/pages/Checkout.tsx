@@ -15,7 +15,23 @@ import { usePhonePe } from "@/hooks/usePhonePe";
 import { useCreateOrder } from "@/hooks/useOrders";
 import { getPhonePePendingOrderStorageKey } from "@/lib/phonepe";
 import { useStoreSettings } from "@/hooks/useStoreSettings";
-import { PhonePeMode } from "@/lib/store-settings";
+import { PhonePeMode, PhonePePaymentMode } from "@/lib/store-settings";
+
+const PHONEPE_PAYMENT_MODE_LABELS: Record<PhonePePaymentMode, string> = {
+  UPI_INTENT: "Google Pay, PhonePe, Paytm & more",
+  UPI_COLLECT: "UPI ID",
+  UPI_QR: "UPI QR",
+  CARD: "Cards",
+  NET_BANKING: "Net Banking",
+};
+
+const describePhonePePaymentModes = (modes?: PhonePePaymentMode[] | null) => {
+  if (!modes || modes.length === 0) {
+    return "UPI, Cards, Net Banking";
+  }
+
+  return modes.map((mode) => PHONEPE_PAYMENT_MODE_LABELS[mode] ?? mode).join(", ");
+};
 
 interface PendingPhonePeOrderPayload {
   orderData: {
@@ -440,8 +456,7 @@ const Checkout = () => {
                             <div>
                               <p className="font-medium text-foreground">Pay Online (PhonePe)</p>
                               <p className="text-sm text-muted-foreground">
-                                {storeSettings?.phonepe_enabled_payment_modes?.join(", ").replaceAll("_", " ") ||
-                                  "UPI, Cards, Net Banking"}
+                                {describePhonePePaymentModes(storeSettings?.phonepe_enabled_payment_modes)}
                               </p>
                             </div>
                             <span className="ml-auto text-xs font-semibold text-primary">

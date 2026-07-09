@@ -127,7 +127,47 @@ const Products = () => {
   };
 
   const generateSlug = (name: string) => {
-    return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+  };
+
+  const getUniqueSlug = async (rawSlug: string, currentProductId?: string) => {
+    const baseSlug = generateSlug(rawSlug) || "product";
+    let candidate = baseSlug;
+    let suffix = 2;
+
+    while (true) {
+      let query = supabase
+        .from("products")
+        .select("id")
+        .eq("slug", candidate)
+        .limit(1);
+
+      if (currentProductId) {
+        query = query.neq("id", currentProductId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      if (!data || data.length === 0) return candidate;
+
+      candidate = `${baseSlug}-${suffix}`;
+      suffix += 1;
+    }
+  };
+
+  const getProductErrorMessage = (message: string) => {
+    if (message.includes("products_slug_key")) {
+      return "A product with this slug already exists. Please use a different product name or slug.";
+    }
+
+    return message;
   };
 
   const generateSku = (name: string) => {
@@ -225,9 +265,25 @@ const Products = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    let uniqueSlug = "";
+
+    try {
+      uniqueSlug = await getUniqueSlug(
+        formData.slug || formData.name,
+        editingProduct?.id
+      );
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Unable to check product slug",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const productData = {
       name: formData.name,
-      slug: formData.slug,
+      slug: uniqueSlug,
       sku: formData.sku || null,
       short_description: formData.short_description || null,
       description: formData.description || null,
@@ -257,7 +313,7 @@ const Products = () => {
         .single();
 
       if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ title: "Error", description: getProductErrorMessage(error.message), variant: "destructive" });
         return;
       }
       
@@ -275,7 +331,7 @@ const Products = () => {
         .single();
 
       if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ title: "Error", description: getProductErrorMessage(error.message), variant: "destructive" });
         return;
       }
 

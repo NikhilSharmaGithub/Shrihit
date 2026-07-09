@@ -4,6 +4,77 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/pjpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+  "image/bmp": "bmp",
+  "image/x-ms-bmp": "bmp",
+  "image/svg+xml": "svg",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/tiff": "tiff",
+  "image/x-icon": "ico",
+  "image/vnd.microsoft.icon": "ico",
+};
+
+const IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "jpe",
+  "jfif",
+  "png",
+  "webp",
+  "gif",
+  "avif",
+  "bmp",
+  "svg",
+  "heic",
+  "heif",
+  "tif",
+  "tiff",
+  "ico",
+]);
+
+const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  jpe: "image/jpeg",
+  jfif: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  avif: "image/avif",
+  bmp: "image/bmp",
+  svg: "image/svg+xml",
+  heic: "image/heic",
+  heif: "image/heif",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  ico: "image/x-icon",
+};
+
+const getImageExtension = (file: File) => {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+
+  if (extension && IMAGE_EXTENSIONS.has(extension)) {
+    return ["jpeg", "jpe", "jfif"].includes(extension) ? "jpg" : extension;
+  }
+
+  return IMAGE_EXTENSION_BY_MIME[file.type.toLowerCase()] ?? null;
+};
+
+const isImageFile = (file: File) => {
+  const extension = getImageExtension(file);
+  const hasImageMimeType = file.type.toLowerCase().startsWith("image/");
+
+  return Boolean(extension && (hasImageMimeType || file.type === ""));
+};
+
 interface ImageUploaderProps {
   images: string[];
   onImagesChange: (images: string[]) => void;
@@ -15,13 +86,12 @@ const ImageUploader = ({ images, onImagesChange, maxImages = 5 }: ImageUploaderP
   const { toast } = useToast();
 
   const uploadImage = useCallback(async (file: File) => {
-    const fileExt = file.name.split(".").pop()?.toLowerCase();
-    const allowedExts = ["jpg", "jpeg", "png", "webp", "gif"];
+    const fileExt = getImageExtension(file);
 
-    if (!fileExt || !allowedExts.includes(fileExt)) {
+    if (!fileExt || !isImageFile(file)) {
       toast({
         title: "Invalid file type",
-        description: "Please upload JPG, PNG, WEBP, or GIF images only",
+        description: "Please upload a valid image file",
         variant: "destructive",
       });
       return null;
@@ -41,7 +111,10 @@ const ImageUploader = ({ images, onImagesChange, maxImages = 5 }: ImageUploaderP
 
     const { error: uploadError } = await supabase.storage
       .from("product-images")
-      .upload(filePath, file);
+      .upload(filePath, file, {
+        contentType: file.type || MIME_TYPE_BY_EXTENSION[fileExt] || "image/*",
+        upsert: false,
+      });
 
     if (uploadError) {
       console.error("Upload error:", uploadError);
@@ -77,21 +150,23 @@ const ImageUploader = ({ images, onImagesChange, maxImages = 5 }: ImageUploaderP
     const filesToUpload = Array.from(files).slice(0, remainingSlots);
     setIsUploading(true);
 
-    const uploadPromises = filesToUpload.map(uploadImage);
-    const uploadedUrls = await Promise.all(uploadPromises);
-    const validUrls = uploadedUrls.filter((url): url is string => url !== null);
+    try {
+      const uploadPromises = filesToUpload.map(uploadImage);
+      const uploadedUrls = await Promise.all(uploadPromises);
+      const validUrls = uploadedUrls.filter((url): url is string => url !== null);
 
-    if (validUrls.length > 0) {
-      onImagesChange([...images, ...validUrls]);
-      toast({
-        title: "Images uploaded",
-        description: `${validUrls.length} image(s) uploaded successfully`,
-      });
+      if (validUrls.length > 0) {
+        onImagesChange([...images, ...validUrls]);
+        toast({
+          title: "Images uploaded",
+          description: `${validUrls.length} image(s) uploaded successfully`,
+        });
+      }
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      e.target.value = "";
     }
-
-    setIsUploading(false);
-    // Reset input
-    e.target.value = "";
   };
 
   const removeImage = async (indexToRemove: number) => {
@@ -124,19 +199,21 @@ const ImageUploader = ({ images, onImagesChange, maxImages = 5 }: ImageUploaderP
     const filesToUpload = Array.from(files).slice(0, remainingSlots);
     setIsUploading(true);
 
-    const uploadPromises = filesToUpload.map(uploadImage);
-    const uploadedUrls = await Promise.all(uploadPromises);
-    const validUrls = uploadedUrls.filter((url): url is string => url !== null);
+    try {
+      const uploadPromises = filesToUpload.map(uploadImage);
+      const uploadedUrls = await Promise.all(uploadPromises);
+      const validUrls = uploadedUrls.filter((url): url is string => url !== null);
 
-    if (validUrls.length > 0) {
-      onImagesChange([...images, ...validUrls]);
-      toast({
-        title: "Images uploaded",
-        description: `${validUrls.length} image(s) uploaded successfully`,
-      });
+      if (validUrls.length > 0) {
+        onImagesChange([...images, ...validUrls]);
+        toast({
+          title: "Images uploaded",
+          description: `${validUrls.length} image(s) uploaded successfully`,
+        });
+      }
+    } finally {
+      setIsUploading(false);
     }
-
-    setIsUploading(false);
   }, [images, maxImages, onImagesChange, toast, uploadImage]);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -181,7 +258,7 @@ const ImageUploader = ({ images, onImagesChange, maxImages = 5 }: ImageUploaderP
         >
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
+            accept="image/*"
             multiple
             onChange={handleFileSelect}
             className="hidden"
@@ -203,7 +280,7 @@ const ImageUploader = ({ images, onImagesChange, maxImages = 5 }: ImageUploaderP
                   <div>
                     <p className="text-sm font-medium">Drop images here or click to upload</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      JPG, PNG, WEBP up to 5MB ({images.length}/{maxImages})
+                      Any image format up to 5MB ({images.length}/{maxImages})
                     </p>
                   </div>
                 </>
