@@ -110,11 +110,20 @@ const Header = () => {
                 aria-label="View wishlist"
               >
                 <Heart size={20} />
-                {wishlistItems > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-semibold rounded-full flex items-center justify-center">
-                    {wishlistItems}
-                  </span>
-                )}
+                <AnimatePresence>
+                  {wishlistItems > 0 && (
+                    <motion.span
+                      key={wishlistItems}
+                      initial={{ scale: 0.4, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.4, opacity: 0 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                      className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-semibold rounded-full flex items-center justify-center"
+                    >
+                      {wishlistItems}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </Link>
               
               {/* User Menu */}
@@ -152,9 +161,20 @@ const Header = () => {
                 aria-label="View cart"
               >
                 <ShoppingBag size={20} />
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-semibold rounded-full flex items-center justify-center">
-                  {totalItems}
-                </span>
+                <AnimatePresence>
+                  {totalItems > 0 && (
+                    <motion.span
+                      key={totalItems}
+                      initial={{ scale: 0.4, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.4, opacity: 0 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                      className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-semibold rounded-full flex items-center justify-center"
+                    >
+                      {totalItems}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </button>
             </div>
           </div>
