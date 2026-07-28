@@ -14,7 +14,6 @@ import Collections from "./pages/Collections";
 import ProductDetail from "./pages/ProductDetail";
 import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
-import PhonePeReturn from "./pages/PhonePeReturn";
 import Wishlist from "./pages/Wishlist";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
@@ -62,7 +61,6 @@ const AnimatedRoutes = () => {
           <Route path="/collections" element={<Collections />} />
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/checkout" element={<Checkout />} />
-          <Route path="/phonepe-return" element={<PhonePeReturn />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/wishlist" element={<Wishlist />} />
           <Route path="/auth" element={<Auth />} />

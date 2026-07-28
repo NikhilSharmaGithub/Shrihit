@@ -284,6 +284,7 @@ export type Database = {
           phonepe_enabled: boolean
           phonepe_enabled_payment_modes: string[]
           phonepe_mode: string
+          razorpay_enabled: boolean
           shipping_cost: number
           store_name: string
           tagline: string
@@ -305,6 +306,7 @@ export type Database = {
           phonepe_enabled?: boolean
           phonepe_enabled_payment_modes?: string[]
           phonepe_mode?: string
+          razorpay_enabled?: boolean
           shipping_cost?: number
           store_name?: string
           tagline?: string
@@ -326,6 +328,7 @@ export type Database = {
           phonepe_enabled?: boolean
           phonepe_enabled_payment_modes?: string[]
           phonepe_mode?: string
+          razorpay_enabled?: boolean
           shipping_cost?: number
           store_name?: string
           tagline?: string

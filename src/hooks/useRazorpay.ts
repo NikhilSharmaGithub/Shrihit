@@ -1,174 +1,183 @@
-import { useState, useCallback } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { useCallback, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
-interface RazorpayOptions {
+const RAZORPAY_CHECKOUT_SCRIPT_URL = "https://checkout.razorpay.com/v1/checkout.js";
+
+interface RazorpayCreateOrderResponse {
+  order_id: string;
+  amount: number;
+  currency: string;
+  key_id: string;
+}
+
+interface RazorpaySuccessResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+interface RazorpayCheckoutOptions {
   key: string;
   amount: number;
   currency: string;
-  name: string;
-  description: string;
   order_id: string;
-  prefill: {
-    name: string;
-    email: string;
-    contact: string;
-  };
-  theme: {
-    color: string;
-  };
-  handler: (response: RazorpayResponse) => void;
-  modal?: {
-    ondismiss: () => void;
-  };
+  name: string;
+  description?: string;
+  prefill?: { name?: string; email?: string; contact?: string };
+  theme?: { color?: string };
+  handler: (response: RazorpaySuccessResponse) => void;
+  modal?: { ondismiss?: () => void };
 }
 
-interface RazorpayResponse {
-  razorpay_payment_id: string;
-  razorpay_order_id: string;
-  razorpay_signature: string;
+interface RazorpayCheckout {
+  open: () => void;
+  on: (event: string, handler: (response: unknown) => void) => void;
+}
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckout;
+  }
+}
+
+interface InitiateRazorpayPaymentOptions {
+  amount: number; // in paise
+  receipt: string;
+  name: string;
+  email: string;
+  contact: string;
+  onSuccess: (response: RazorpaySuccessResponse) => Promise<void> | void;
+  onFailure: (error: Error) => void;
+  onDismiss?: () => void;
 }
 
 interface UseRazorpayReturn {
   isLoading: boolean;
-  isRazorpayReady: boolean;
-  initiatePayment: (options: PaymentOptions) => Promise<void>;
+  initiatePayment: (options: InitiateRazorpayPaymentOptions) => Promise<void>;
 }
 
-interface PaymentOptions {
-  amount: number; // In rupees
-  orderId: string;
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
-  onSuccess: (response: RazorpayResponse) => void;
-  onFailure: (error: Error) => void;
-}
-
-// Declare Razorpay on window
-declare global {
-  interface Window {
-    Razorpay: new (options: RazorpayOptions) => {
-      open: () => void;
-      close: () => void;
-    };
+const normalizeError = (error: unknown) => {
+  if (error instanceof Error) {
+    return error;
   }
-}
+
+  return new Error("Razorpay payment failed. Please try again.");
+};
+
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${RAZORPAY_CHECKOUT_SCRIPT_URL}"]`);
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(true));
+      existingScript.addEventListener("error", () => resolve(false));
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_SCRIPT_URL;
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => {
+      console.error("Failed to load Razorpay checkout script");
+      resolve(false);
+    };
+
+    document.body.appendChild(script);
+  });
+};
 
 export const useRazorpay = (): UseRazorpayReturn => {
   const [isLoading, setIsLoading] = useState(false);
-  const [isRazorpayReady, setIsRazorpayReady] = useState(false);
-  const { toast } = useToast();
 
-  // Load Razorpay script dynamically
-  const loadRazorpayScript = useCallback((): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (window.Razorpay) {
-        setIsRazorpayReady(true);
-        resolve(true);
-        return;
+  const initiatePayment = useCallback(async (options: InitiateRazorpayPaymentOptions) => {
+    setIsLoading(true);
+
+    try {
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        throw new Error("Unable to load Razorpay checkout. Please refresh and try again.");
       }
 
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.async = true;
-      script.onload = () => {
-        setIsRazorpayReady(true);
-        resolve(true);
-      };
-      script.onerror = () => {
-        console.error("Failed to load Razorpay script");
-        resolve(false);
-      };
-      document.body.appendChild(script);
-    });
-  }, []);
-
-  const initiatePayment = useCallback(
-    async ({
-      amount,
-      orderId,
-      customerName,
-      customerEmail,
-      customerPhone,
-      onSuccess,
-      onFailure,
-    }: PaymentOptions) => {
-      setIsLoading(true);
-
-      try {
-        // Load Razorpay script
-        const isLoaded = await loadRazorpayScript();
-        if (!isLoaded) {
-          throw new Error("Failed to load payment gateway");
+      const { data: orderData, error: orderError } = await supabase.functions.invoke<RazorpayCreateOrderResponse>(
+        "razorpay-create-order",
+        {
+          body: {
+            amount: options.amount,
+            receipt: options.receipt,
+          },
         }
+      );
 
-        // In production, you would create an order via edge function
-        // For now, we'll show a placeholder since keys aren't configured
-        const razorpayKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
-        
-        if (!razorpayKeyId) {
-          toast({
-            title: "Payment Gateway Not Configured",
-            description: "Razorpay integration is ready but API keys need to be configured. Please contact admin.",
-            variant: "destructive",
-          });
-          setIsLoading(false);
-          return;
-        }
+      if (orderError) {
+        throw new Error(orderError.message || "Failed to initiate Razorpay payment.");
+      }
 
-        const options: RazorpayOptions = {
-          key: razorpayKeyId,
-          amount: amount * 100, // Razorpay expects paise
-          currency: "INR",
-          name: "श्रीहित SHRIHIT",
-          description: "Pooja Items Purchase",
-          order_id: orderId,
-          prefill: {
-            name: customerName,
-            email: customerEmail,
-            contact: customerPhone,
-          },
-          theme: {
-            color: "#C17F24", // Primary gold color
-          },
-          handler: (response) => {
-            toast({
-              title: "Payment Successful! 🎉",
-              description: "Your order has been placed successfully.",
-            });
-            onSuccess(response);
-          },
-          modal: {
-            ondismiss: () => {
-              toast({
-                title: "Payment Cancelled",
-                description: "You cancelled the payment. Your order is not placed.",
-              });
-              setIsLoading(false);
-            },
-          },
-        };
+      if (!orderData?.order_id) {
+        throw new Error("Razorpay did not return an order id.");
+      }
 
-        const razorpay = new window.Razorpay(options);
-        razorpay.open();
-      } catch (error) {
-        console.error("Payment error:", error);
-        onFailure(error as Error);
-        toast({
-          title: "Payment Failed",
-          description: "Something went wrong. Please try again.",
-          variant: "destructive",
-        });
-      } finally {
+      if (!window.Razorpay) {
+        throw new Error("Razorpay checkout is unavailable. Please try again.");
+      }
+
+      const checkout = new window.Razorpay({
+        key: orderData.key_id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        order_id: orderData.order_id,
+        name: "Shrihit",
+        description: `Order ${options.receipt}`,
+        prefill: {
+          name: options.name,
+          email: options.email,
+          contact: options.contact,
+        },
+        theme: { color: "#ca8a04" },
+        handler: async (response) => {
+          try {
+            const { data: verifyData, error: verifyError } = await supabase.functions.invoke<{ verified: boolean }>(
+              "razorpay-verify-payment",
+              { body: response }
+            );
+
+            if (verifyError || !verifyData?.verified) {
+              throw new Error(verifyError?.message || "Payment verification failed.");
+            }
+
+            await options.onSuccess(response);
+          } catch (error) {
+            options.onFailure(normalizeError(error));
+          } finally {
+            setIsLoading(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsLoading(false);
+            options.onDismiss?.();
+          },
+        },
+      });
+
+      checkout.on("payment.failed", () => {
         setIsLoading(false);
-      }
-    },
-    [loadRazorpayScript, toast]
-  );
+        options.onFailure(new Error("Payment failed. Please try again."));
+      });
+
+      checkout.open();
+    } catch (error) {
+      setIsLoading(false);
+      options.onFailure(normalizeError(error));
+    }
+  }, []);
 
   return {
     isLoading,
-    isRazorpayReady,
     initiatePayment,
   };
 };

@@ -7,27 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useStoreSettings, useUpdateStoreSettings } from "@/hooks/useStoreSettings";
-import {
-  DEFAULT_STORE_SETTINGS,
-  getDefaultPhonePeScriptUrl,
-  PhonePeMode,
-  PhonePePaymentMode,
-  PHONEPE_MODE_OPTIONS,
-  PHONEPE_PAYMENT_MODE_OPTIONS,
-  StoreSettings,
-} from "@/lib/store-settings";
-
-const PAYMENT_MODE_LABELS: Record<PhonePePaymentMode, string> = {
-  UPI_INTENT: "UPI Intent",
-  UPI_COLLECT: "UPI Collect",
-  UPI_QR: "UPI QR",
-  CARD: "Cards",
-  NET_BANKING: "Net Banking",
-};
+import { DEFAULT_STORE_SETTINGS, StoreSettings } from "@/lib/store-settings";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -43,57 +25,11 @@ const Settings = () => {
 
   const isSaving = updateSettings.isPending;
 
-  const handlePhonePeModeChange = (value: string) => {
-    const nextMode = value as PhonePeMode;
-    const defaultScriptUrl = getDefaultPhonePeScriptUrl(nextMode);
-
-    setFormData((prev) => {
-      const currentScriptUrl = prev.phonepe_checkout_script_url.trim();
-      const previousDefaultScriptUrl = getDefaultPhonePeScriptUrl(prev.phonepe_mode);
-      const shouldUseDefaultScript = !currentScriptUrl || currentScriptUrl === previousDefaultScriptUrl;
-
-      return {
-        ...prev,
-        phonepe_mode: nextMode,
-        phonepe_checkout_script_url: shouldUseDefaultScript ? defaultScriptUrl : currentScriptUrl,
-      };
-    });
-  };
-
-  const togglePaymentMode = (mode: PhonePePaymentMode, checked: boolean) => {
-    setFormData((prev) => {
-      const currentModes = new Set(prev.phonepe_enabled_payment_modes);
-
-      if (checked) {
-        currentModes.add(mode);
-      } else {
-        currentModes.delete(mode);
-      }
-
-      return {
-        ...prev,
-        phonepe_enabled_payment_modes: Array.from(currentModes) as PhonePePaymentMode[],
-      };
-    });
-  };
-
   const handleSaveSettings = async () => {
-    const normalizedScriptUrl =
-      formData.phonepe_checkout_script_url.trim() || getDefaultPhonePeScriptUrl(formData.phonepe_mode);
-
-    if (!formData.cod_enabled && !formData.phonepe_enabled) {
+    if (!formData.cod_enabled && !formData.razorpay_enabled) {
       toast({
         title: "Invalid Configuration",
-        description: "At least one payment method (COD or PhonePe) must remain enabled.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (formData.phonepe_enabled && formData.phonepe_enabled_payment_modes.length === 0) {
-      toast({
-        title: "Invalid PhonePe Setup",
-        description: "Select at least one PhonePe payment mode.",
+        description: "At least one payment method (COD or Razorpay) must remain enabled.",
         variant: "destructive",
       });
       return;
@@ -109,10 +45,7 @@ const Settings = () => {
     }
 
     try {
-      await updateSettings.mutateAsync({
-        ...formData,
-        phonepe_checkout_script_url: normalizedScriptUrl,
-      });
+      await updateSettings.mutateAsync(formData);
 
       toast({
         title: "Settings Saved",
@@ -284,108 +217,23 @@ const Settings = () => {
               <div className="p-2 bg-purple-100 rounded-lg">
                 <CreditCard size={20} className="text-purple-700" />
               </div>
-              <h2 className="text-xl font-semibold">PhonePe Master Control</h2>
+              <h2 className="text-xl font-semibold">Razorpay Master Control</h2>
             </div>
 
             <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>Enable PhonePe</Label>
-                  <p className="text-sm text-muted-foreground">Master switch for all online payments via PhonePe</p>
+                  <Label>Enable Razorpay</Label>
+                  <p className="text-sm text-muted-foreground">Master switch for online payments via Razorpay (UPI, Cards, Net Banking, Wallets)</p>
                 </div>
                 <Switch
-                  checked={formData.phonepe_enabled}
-                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, phonepe_enabled: checked }))}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>PhonePe Environment</Label>
-                  <Select value={formData.phonepe_mode} onValueChange={handlePhonePeModeChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select mode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PHONEPE_MODE_OPTIONS.map((mode) => (
-                        <SelectItem key={mode} value={mode}>
-                          {mode === "production" ? "Production (Live)" : "Sandbox (Test)"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Checkout Flow</Label>
-                  <Select
-                    value={formData.phonepe_checkout_flow}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        phonepe_checkout_flow: value as StoreSettings["phonepe_checkout_flow"],
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select flow" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="IFRAME">IFrame (Recommended)</SelectItem>
-                      <SelectItem value="REDIRECT">Redirect</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phonepeScriptUrl">Checkout Script URL</Label>
-                <Input
-                  id="phonepeScriptUrl"
-                  value={formData.phonepe_checkout_script_url}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, phonepe_checkout_script_url: e.target.value }))
-                  }
-                  placeholder={getDefaultPhonePeScriptUrl(formData.phonepe_mode)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave blank to auto-use default script for selected mode.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <Label>Enabled Payment Modes</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {PHONEPE_PAYMENT_MODE_OPTIONS.map((mode) => (
-                    <label
-                      key={mode}
-                      className="flex items-center gap-3 rounded-md border border-border px-3 py-2 cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={formData.phonepe_enabled_payment_modes.includes(mode)}
-                        onCheckedChange={(checked) => togglePaymentMode(mode, checked === true)}
-                      />
-                      <span className="text-sm text-foreground">{PAYMENT_MODE_LABELS[mode]}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Disable Payment Retry</Label>
-                  <p className="text-sm text-muted-foreground">If enabled, users cannot retry payment on same session</p>
-                </div>
-                <Switch
-                  checked={formData.phonepe_disable_payment_retry}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({ ...prev, phonepe_disable_payment_retry: checked }))
-                  }
+                  checked={formData.razorpay_enabled}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, razorpay_enabled: checked }))}
                 />
               </div>
 
               <div className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
-                Security note: PhonePe `client_id` / `client_secret` Admin panel me intentionally show nahi kiye gaye hain.
+                Security note: Razorpay `key_id` / `key_secret` Admin panel me intentionally show nahi kiye gaye hain.
                 Ye secrets server-side Supabase Edge Function secrets me secure rehte hain.
               </div>
             </div>

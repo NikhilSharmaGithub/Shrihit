@@ -11,61 +11,16 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
-import { usePhonePe } from "@/hooks/usePhonePe";
+import { useRazorpay } from "@/hooks/useRazorpay";
 import { useCreateOrder } from "@/hooks/useOrders";
-import { getPhonePePendingOrderStorageKey } from "@/lib/phonepe";
 import { useStoreSettings } from "@/hooks/useStoreSettings";
-import { PhonePeMode, PhonePePaymentMode } from "@/lib/store-settings";
 import { supabase } from "@/integrations/supabase/client";
-
-const PHONEPE_PAYMENT_MODE_LABELS: Record<PhonePePaymentMode, string> = {
-  UPI_INTENT: "Google Pay, PhonePe, Paytm & more",
-  UPI_COLLECT: "UPI ID",
-  UPI_QR: "UPI QR",
-  CARD: "Cards",
-  NET_BANKING: "Net Banking",
-};
-
-const describePhonePePaymentModes = (modes?: PhonePePaymentMode[] | null) => {
-  if (!modes || modes.length === 0) {
-    return "UPI, Cards, Net Banking";
-  }
-
-  return modes.map((mode) => PHONEPE_PAYMENT_MODE_LABELS[mode] ?? mode).join(", ");
-};
-
-interface PendingPhonePeOrderPayload {
-  orderData: {
-    order_number: string;
-    payment_method: string;
-    payment_status: string;
-    subtotal: number;
-    shipping_cost: number;
-    total: number;
-    shipping_address: {
-      full_name: string;
-      phone: string;
-      address_line1: string;
-      city: string;
-      state: string;
-      pincode: string;
-    };
-    items: {
-      product_id: string;
-      product_name: string;
-      product_image: string;
-      quantity: number;
-      price: number;
-    }[];
-  };
-  phonepeMode: PhonePeMode;
-}
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useCart();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { initiatePayment, isLoading: isPhonePeLoading } = usePhonePe();
+  const { initiatePayment, isLoading: isRazorpayLoading } = useRazorpay();
   const createOrder = useCreateOrder();
   const { data: storeSettings } = useStoreSettings();
   
@@ -87,19 +42,19 @@ const Checkout = () => {
   const shipping = subtotal >= shippingThreshold ? 0 : shippingCost;
   const total = subtotal + shipping;
   const codEnabled = storeSettings?.cod_enabled ?? true;
-  const phonePeEnabled = storeSettings?.phonepe_enabled ?? true;
-  const noPaymentMethodEnabled = !codEnabled && !phonePeEnabled;
+  const razorpayEnabled = storeSettings?.razorpay_enabled ?? true;
+  const noPaymentMethodEnabled = !codEnabled && !razorpayEnabled;
 
   useEffect(() => {
-    if (paymentMethod === "cod" && !codEnabled && phonePeEnabled) {
-      setPaymentMethod("phonepe");
+    if (paymentMethod === "cod" && !codEnabled && razorpayEnabled) {
+      setPaymentMethod("razorpay");
       return;
     }
 
-    if (paymentMethod === "phonepe" && !phonePeEnabled && codEnabled) {
+    if (paymentMethod === "razorpay" && !razorpayEnabled && codEnabled) {
       setPaymentMethod("cod");
     }
-  }, [codEnabled, phonePeEnabled, paymentMethod]);
+  }, [codEnabled, razorpayEnabled, paymentMethod]);
 
   const addMoreForFreeShipping = useMemo(() => {
     if (shipping === 0) {
@@ -147,7 +102,7 @@ const Checkout = () => {
       return;
     }
 
-    if (paymentMethod === "phonepe" && !phonePeEnabled) {
+    if (paymentMethod === "razorpay" && !razorpayEnabled) {
       toast({
         title: "Online Payment Disabled",
         description: "Online payment is currently disabled by admin.",
@@ -175,10 +130,10 @@ const Checkout = () => {
     }
 
     const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-    
+
     const orderData = {
       order_number: orderNumber,
-      payment_method: paymentMethod === "phonepe" ? "phonepe" : "cod",
+      payment_method: paymentMethod === "razorpay" ? "razorpay" : "cod",
       payment_status: "pending",
       subtotal,
       shipping_cost: shipping,
@@ -201,29 +156,19 @@ const Checkout = () => {
     };
 
     try {
-      if (paymentMethod === "phonepe") {
-        const pendingOrderKey = getPhonePePendingOrderStorageKey(orderNumber);
-        const phonepeMode = storeSettings?.phonepe_mode ?? "sandbox";
-        const pendingPayload: PendingPhonePeOrderPayload = {
-          orderData,
-          phonepeMode,
-        };
-        localStorage.setItem(pendingOrderKey, JSON.stringify(pendingPayload));
-
+      if (paymentMethod === "razorpay") {
         await initiatePayment({
-          merchantOrderId: orderNumber,
           amount: Math.round(total * 100),
-          redirectUrl: `${window.location.origin}/phonepe-return?merchantOrderId=${encodeURIComponent(orderNumber)}`,
-          phonepeMode,
-          checkoutFlowType: storeSettings?.phonepe_checkout_flow ?? "IFRAME",
-          checkoutScriptUrl: storeSettings?.phonepe_checkout_script_url,
+          receipt: orderNumber,
+          name: `${formData.firstName} ${formData.lastName}`,
+          email: formData.email,
+          contact: formData.phone,
           onSuccess: async () => {
             try {
               await createOrder.mutateAsync({
                 ...orderData,
                 payment_status: "paid",
               });
-              localStorage.removeItem(pendingOrderKey);
               clearCart();
               navigate("/order-success");
             } catch (error) {
@@ -237,18 +182,17 @@ const Checkout = () => {
             setIsProcessing(false);
           },
           onFailure: (error) => {
-            localStorage.removeItem(pendingOrderKey);
             setIsProcessing(false);
             toast({
               title: "Payment Failed",
-              description: error.message || "PhonePe payment failed. Please try again.",
+              description: error.message || "Razorpay payment failed. Please try again.",
               variant: "destructive",
             });
           },
+          onDismiss: () => {
+            setIsProcessing(false);
+          },
         });
-        if ((storeSettings?.phonepe_checkout_flow ?? "IFRAME") === "REDIRECT") {
-          setIsProcessing(false);
-        }
         return;
       } else {
         // Cash on Delivery - create order directly
@@ -464,21 +408,18 @@ const Checkout = () => {
                         </Label>
                       </div>
                     )}
-                    {phonePeEnabled && (
-                      <div className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-colors cursor-pointer ${paymentMethod === "phonepe" ? "border-primary bg-primary/5" : "border-border"}`}>
-                        <RadioGroupItem value="phonepe" id="phonepe" />
-                        <Label htmlFor="phonepe" className="flex-1 cursor-pointer">
+                    {razorpayEnabled && (
+                      <div className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-colors cursor-pointer ${paymentMethod === "razorpay" ? "border-primary bg-primary/5" : "border-border"}`}>
+                        <RadioGroupItem value="razorpay" id="razorpay" />
+                        <Label htmlFor="razorpay" className="flex-1 cursor-pointer">
                           <div className="flex items-center gap-3">
                             <Smartphone className="text-primary" size={24} />
                             <div>
-                              <p className="font-medium text-foreground">Pay Online (PhonePe)</p>
+                              <p className="font-medium text-foreground">Pay Online (Razorpay)</p>
                               <p className="text-sm text-muted-foreground">
-                                {describePhonePePaymentModes(storeSettings?.phonepe_enabled_payment_modes)}
+                                UPI, Cards, Net Banking, Wallets
                               </p>
                             </div>
-                            <span className="ml-auto text-xs font-semibold text-primary">
-                              {storeSettings?.phonepe_mode === "production" ? "PHONEPE LIVE" : "PHONEPE TEST"}
-                            </span>
                           </div>
                         </Label>
                       </div>
@@ -493,14 +434,14 @@ const Checkout = () => {
                     variant="sacred" 
                     size="lg" 
                     className="w-full"
-                    disabled={isProcessing || isPhonePeLoading || noPaymentMethodEnabled}
+                    disabled={isProcessing || isRazorpayLoading || noPaymentMethodEnabled}
                   >
-                    {isProcessing || isPhonePeLoading ? (
+                    {isProcessing || isRazorpayLoading ? (
                       <>
                         <Loader2 size={18} className="animate-spin mr-2" />
                         Processing...
                       </>
-                    ) : paymentMethod === "phonepe" ? (
+                    ) : paymentMethod === "razorpay" ? (
                       `Pay ₹${total.toLocaleString()}`
                     ) : (
                       `Place Order • ₹${total.toLocaleString()}`
@@ -577,14 +518,14 @@ const Checkout = () => {
                   variant="sacred" 
                   size="lg" 
                   className="w-full hidden lg:flex"
-                  disabled={isProcessing || isPhonePeLoading || noPaymentMethodEnabled}
+                  disabled={isProcessing || isRazorpayLoading || noPaymentMethodEnabled}
                 >
-                  {isProcessing || isPhonePeLoading ? (
+                  {isProcessing || isRazorpayLoading ? (
                     <>
                       <Loader2 size={18} className="animate-spin mr-2" />
                       Processing...
                     </>
-                  ) : paymentMethod === "phonepe" ? (
+                  ) : paymentMethod === "razorpay" ? (
                     `Pay ₹${total.toLocaleString()}`
                   ) : (
                     "Place Order"

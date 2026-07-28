@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Eye, Search, Filter, Package, Clock, CheckCircle, XCircle, Truck } from "lucide-react";
+import { Eye, Search, Filter, Package, Clock, CheckCircle, XCircle, Truck, Download, Printer, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +90,26 @@ const Orders = () => {
 
   useEffect(() => {
     fetchOrders();
+
+    const channel = supabase
+      .channel("admin-orders-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "orders" },
+        (payload) => {
+          toast({
+            title: "🎉 New Order Received!",
+            description: `Order #${(payload.new as { order_number: string }).order_number} just came in.`,
+          });
+          fetchOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchOrders = async () => {
@@ -146,6 +166,94 @@ const Orders = () => {
     setIsDialogOpen(true);
   };
 
+  const exportToCsv = () => {
+    const headers = ["Order Number", "Customer", "City", "Status", "Payment Status", "Payment Method", "Total", "Date"];
+    const rows = filteredOrders.map((order) => [
+      order.order_number,
+      order.shipping_address.full_name,
+      order.shipping_address.city,
+      order.status,
+      order.payment_status,
+      order.payment_method,
+      order.total,
+      format(new Date(order.created_at), "dd MMM yyyy HH:mm"),
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `orders-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printInvoice = () => {
+    if (!selectedOrder) return;
+
+    const itemsHtml = (selectedOrder.order_items || [])
+      .map(
+        (item) => `
+        <tr>
+          <td style="padding:8px 0;">${item.product_name}</td>
+          <td style="padding:8px 0;text-align:center;">${item.quantity}</td>
+          <td style="padding:8px 0;text-align:right;">₹${item.price}</td>
+          <td style="padding:8px 0;text-align:right;">₹${item.price * item.quantity}</td>
+        </tr>`
+      )
+      .join("");
+
+    const invoiceWindow = window.open("", "_blank", "width=800,height=900");
+    if (!invoiceWindow) return;
+
+    invoiceWindow.document.write(`
+      <html>
+        <head>
+          <title>Invoice - ${selectedOrder.order_number}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 32px; color: #1a1a1a; }
+            h1 { font-size: 22px; margin-bottom: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+            th { text-align: left; border-bottom: 2px solid #333; padding-bottom: 8px; }
+            th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: right; }
+            th:nth-child(2) { text-align: center; }
+            .total-row td { border-top: 2px solid #333; font-weight: bold; padding-top: 8px; }
+            .meta { color: #555; margin-bottom: 4px; }
+          </style>
+        </head>
+        <body>
+          <h1>Shrihit</h1>
+          <p class="meta">Invoice for Order #${selectedOrder.order_number}</p>
+          <p class="meta">Date: ${format(new Date(selectedOrder.created_at), "dd MMM yyyy, HH:mm")}</p>
+          <p class="meta">Payment: ${selectedOrder.payment_method.toUpperCase()} (${selectedOrder.payment_status})</p>
+          <hr />
+          <p><strong>${selectedOrder.shipping_address.full_name}</strong></p>
+          <p>${selectedOrder.shipping_address.address_line1}${selectedOrder.shipping_address.address_line2 ? ", " + selectedOrder.shipping_address.address_line2 : ""}</p>
+          <p>${selectedOrder.shipping_address.city}, ${selectedOrder.shipping_address.state} - ${selectedOrder.shipping_address.pincode}</p>
+          <p>Phone: ${selectedOrder.shipping_address.phone}</p>
+          <table>
+            <thead>
+              <tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+              <tr><td colspan="3" style="padding-top:12px;">Subtotal</td><td style="text-align:right;padding-top:12px;">₹${selectedOrder.subtotal}</td></tr>
+              <tr><td colspan="3">Shipping</td><td style="text-align:right;">₹${selectedOrder.shipping_cost}</td></tr>
+              <tr class="total-row"><td colspan="3">Total</td><td style="text-align:right;">₹${selectedOrder.total}</td></tr>
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    invoiceWindow.document.close();
+    invoiceWindow.focus();
+    invoiceWindow.print();
+  };
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -165,9 +273,20 @@ const Orders = () => {
   return (
     <div className="p-6 lg:p-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="mb-8">
-          <h1 className="font-display text-3xl font-semibold text-foreground mb-2">Orders</h1>
-          <p className="text-muted-foreground">Manage customer orders</p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="font-display text-3xl font-semibold text-foreground mb-2">Orders</h1>
+            <p className="text-muted-foreground flex items-center gap-2">
+              Manage customer orders
+              <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                <Bell size={12} /> Live updates on
+              </span>
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={exportToCsv} disabled={filteredOrders.length === 0}>
+            <Download size={16} className="mr-2" />
+            Export CSV
+          </Button>
         </div>
 
         {/* Stats Cards */}
@@ -291,9 +410,15 @@ const Orders = () => {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="font-display">
-                Order #{selectedOrder?.order_number}
-              </DialogTitle>
+              <div className="flex items-center justify-between gap-4 pr-8">
+                <DialogTitle className="font-display">
+                  Order #{selectedOrder?.order_number}
+                </DialogTitle>
+                <Button variant="outline" size="sm" onClick={printInvoice}>
+                  <Printer size={16} className="mr-2" />
+                  Print Invoice
+                </Button>
+              </div>
             </DialogHeader>
             {selectedOrder && (
               <div className="space-y-6">

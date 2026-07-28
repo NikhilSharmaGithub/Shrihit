@@ -1,10 +1,26 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Package, Tags, Users, TrendingUp, Plus, ShoppingCart, IndianRupee, Clock, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Package, Tags, Users, TrendingUp, Plus, ShoppingCart, IndianRupee, Clock, ArrowUpRight, ArrowDownRight, AlertTriangle, Flame } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
+import { Badge } from "@/components/ui/badge";
+
+const LOW_STOCK_THRESHOLD = 5;
+
+interface LowStockProduct {
+  id: string;
+  name: string;
+  stock_qty: number;
+  images: string[];
+}
+
+interface TopProduct {
+  product_name: string;
+  quantity: number;
+  revenue: number;
+}
 
 interface OrderStats {
   date: string;
@@ -33,13 +49,68 @@ const Dashboard = () => {
   const [pendingOrders, setPendingOrders] = useState(0);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [orderStats, setOrderStats] = useState<OrderStats[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([]);
+  const [outOfStockCount, setOutOfStockCount] = useState(0);
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchStats();
     fetchRecentOrders();
     fetchOrderStats();
+    fetchInventoryAlerts();
+    fetchTopProducts();
   }, []);
+
+  const fetchInventoryAlerts = async () => {
+    const [{ data: lowStock }, { count: outOfStock }] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, name, stock_qty, images")
+        .eq("is_active", true)
+        .gt("stock_qty", 0)
+        .lte("stock_qty", LOW_STOCK_THRESHOLD)
+        .order("stock_qty", { ascending: true })
+        .limit(5),
+      supabase
+        .from("products")
+        .select("*", { count: "exact", head: true })
+        .eq("is_active", true)
+        .eq("in_stock", false),
+    ]);
+
+    setLowStockProducts(lowStock || []);
+    setOutOfStockCount(outOfStock || 0);
+  };
+
+  const fetchTopProducts = async () => {
+    const { data } = await supabase
+      .from("order_items")
+      .select("product_name, quantity, price");
+
+    if (!data) return;
+
+    const totals = new Map<string, TopProduct>();
+    for (const item of data) {
+      const existing = totals.get(item.product_name);
+      if (existing) {
+        existing.quantity += item.quantity;
+        existing.revenue += item.quantity * item.price;
+      } else {
+        totals.set(item.product_name, {
+          product_name: item.product_name,
+          quantity: item.quantity,
+          revenue: item.quantity * item.price,
+        });
+      }
+    }
+
+    setTopProducts(
+      Array.from(totals.values())
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5)
+    );
+  };
 
   const fetchStats = async () => {
     const [
@@ -270,6 +341,80 @@ const Dashboard = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Inventory Alerts & Top Products */}
+      {(lowStockProducts.length > 0 || outOfStockCount > 0 || topProducts.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {(lowStockProducts.length > 0 || outOfStockCount > 0) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="bg-card border border-border rounded-xl p-6"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <AlertTriangle size={18} className="text-amber-600" />
+                <h2 className="font-semibold">Inventory Alerts</h2>
+              </div>
+              <div className="space-y-2">
+                {outOfStockCount > 0 && (
+                  <Link
+                    to="/admin/products"
+                    className="flex items-center justify-between p-3 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                  >
+                    <span className="text-sm font-medium text-red-700">Out of stock</span>
+                    <Badge className="bg-red-600 hover:bg-red-600">{outOfStockCount}</Badge>
+                  </Link>
+                )}
+                {lowStockProducts.map((product) => (
+                  <Link
+                    key={product.id}
+                    to="/admin/products"
+                    className="flex items-center gap-3 p-3 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors"
+                  >
+                    {product.images?.[0] && (
+                      <img src={product.images[0]} alt={product.name} className="w-9 h-9 rounded object-cover" />
+                    )}
+                    <p className="flex-1 text-sm font-medium truncate">{product.name}</p>
+                    <Badge variant="outline" className="border-amber-600 text-amber-700">
+                      {product.stock_qty} left
+                    </Badge>
+                  </Link>
+                ))}
+                {lowStockProducts.length === 0 && outOfStockCount === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">All products well stocked</p>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {topProducts.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-card border border-border rounded-xl p-6"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Flame size={18} className="text-orange-500" />
+                <h2 className="font-semibold">Top Selling Products</h2>
+              </div>
+              <div className="space-y-2">
+                {topProducts.map((product, index) => (
+                  <div key={product.product_name} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                    <span className="w-6 h-6 flex items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
+                      {index + 1}
+                    </span>
+                    <p className="flex-1 text-sm font-medium truncate">{product.product_name}</p>
+                    <p className="text-sm text-muted-foreground shrink-0">{product.quantity} sold</p>
+                    <p className="text-sm font-semibold shrink-0">₹{product.revenue.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </div>
+      )}
 
       {/* Recent Orders & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
