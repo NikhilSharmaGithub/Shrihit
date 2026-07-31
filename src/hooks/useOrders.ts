@@ -7,6 +7,8 @@ export interface Order {
   status: string;
   payment_method: string;
   payment_status: string;
+  razorpay_order_id?: string | null;
+  razorpay_payment_id?: string | null;
   subtotal: number;
   shipping_cost: number;
   total: number;
@@ -154,6 +156,39 @@ export const useCreateOrder = () => {
         ...order,
         shipping_address: order.shipping_address as unknown as Order['shipping_address'],
       } as Order;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+};
+
+export interface MarkOrderPaidData {
+  orderId: string;
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+}
+
+/**
+ * Marks an already-created order as paid. Only called after the
+ * razorpay-verify-payment edge function has confirmed the signature, so the
+ * payment identifiers stored here are trustworthy for reconciliation/refunds.
+ */
+export const useMarkOrderPaid = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ orderId, razorpayOrderId, razorpayPaymentId }: MarkOrderPaidData) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          payment_status: 'paid',
+          razorpay_order_id: razorpayOrderId,
+          razorpay_payment_id: razorpayPaymentId,
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });

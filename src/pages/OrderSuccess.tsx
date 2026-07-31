@@ -1,9 +1,12 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CheckCircle, Package, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const OrderSuccess = () => {
+  const location = useLocation();
+  const orderNumber = (location.state as { orderNumber?: string } | null)?.orderNumber;
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <motion.div
@@ -37,7 +40,9 @@ const OrderSuccess = () => {
         <div className="bg-card rounded-xl p-6 shadow-sacred mb-8">
           <div className="flex items-center justify-center gap-3 text-primary mb-4">
             <Package size={24} />
-            <span className="font-display text-lg font-medium">Order #SHR{Date.now().toString().slice(-6)}</span>
+            <span className="font-display text-lg font-medium">
+              {orderNumber ? `Order #${orderNumber}` : "Order confirmed"}
+            </span>
           </div>
           <p className="text-sm text-muted-foreground">
             Estimated delivery: 3-5 business days

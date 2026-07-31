@@ -376,12 +376,13 @@ const Collections = () => {
 
                               {/* Add to Cart Overlay */}
                               <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-foreground/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                <button 
+                                <button
                                   onClick={(e) => handleAddToCart(product, e)}
-                                  className="w-full bg-background text-foreground font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 hover:bg-primary hover:text-primary-foreground transition-colors"
+                                  disabled={!product.in_stock}
+                                  className="w-full bg-background text-foreground font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-background disabled:hover:text-foreground"
                                 >
                                   <ShoppingBag size={16} />
-                                  Add to Cart
+                                  {product.in_stock ? "Add to Cart" : "Out of Stock"}
                                 </button>
                               </div>
                             </div>
@@ -461,13 +462,14 @@ const Collections = () => {
                               >
                                 <Heart size={18} fill={isInWishlist(product.id) ? "currentColor" : "none"} className={isInWishlist(product.id) ? "" : "text-muted-foreground"} />
                               </button>
-                              <Button 
-                                variant="sacred" 
+                              <Button
+                                variant="sacred"
                                 size="sm"
+                                disabled={!product.in_stock}
                                 onClick={(e) => handleAddToCart(product, e)}
                               >
                                 <ShoppingBag size={16} className="mr-2" />
-                                Add to Cart
+                                {product.in_stock ? "Add to Cart" : "Out of Stock"}
                               </Button>
                             </div>
                           </Link>

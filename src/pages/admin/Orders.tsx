@@ -54,6 +54,8 @@ interface Order {
   status: string;
   payment_status: string;
   payment_method: string;
+  razorpay_order_id?: string | null;
+  razorpay_payment_id?: string | null;
   subtotal: number;
   shipping_cost: number;
   total: number;
@@ -445,6 +447,25 @@ const Orders = () => {
                     <p className="font-medium">{format(new Date(selectedOrder.created_at), "dd MMM yyyy, HH:mm")}</p>
                   </div>
                 </div>
+
+                {/* Razorpay reference — needed to reconcile or refund in the Razorpay dashboard */}
+                {selectedOrder.razorpay_payment_id && (
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <h3 className="font-medium mb-2">Razorpay Reference</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Payment ID</p>
+                        <p className="font-mono break-all">{selectedOrder.razorpay_payment_id}</p>
+                      </div>
+                      {selectedOrder.razorpay_order_id && (
+                        <div>
+                          <p className="text-muted-foreground">Order ID</p>
+                          <p className="font-mono break-all">{selectedOrder.razorpay_order_id}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Shipping Address */}
                 <div className="bg-muted/50 rounded-lg p-4">

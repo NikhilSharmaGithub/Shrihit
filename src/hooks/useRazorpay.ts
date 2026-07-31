@@ -41,7 +41,7 @@ declare global {
 }
 
 interface InitiateRazorpayPaymentOptions {
-  amount: number; // in paise
+  /** Order number of an existing pending order; the server derives the amount from it. */
   receipt: string;
   name: string;
   email: string;
@@ -105,12 +105,7 @@ export const useRazorpay = (): UseRazorpayReturn => {
 
       const { data: orderData, error: orderError } = await supabase.functions.invoke<RazorpayCreateOrderResponse>(
         "razorpay-create-order",
-        {
-          body: {
-            amount: options.amount,
-            receipt: options.receipt,
-          },
-        }
+        { body: { receipt: options.receipt } }
       );
 
       if (orderError) {

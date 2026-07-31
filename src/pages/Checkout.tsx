@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
 import { useRazorpay } from "@/hooks/useRazorpay";
-import { useCreateOrder } from "@/hooks/useOrders";
+import { useCreateOrder, useMarkOrderPaid } from "@/hooks/useOrders";
 import { useStoreSettings } from "@/hooks/useStoreSettings";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -22,6 +22,7 @@ const Checkout = () => {
   const navigate = useNavigate();
   const { initiatePayment, isLoading: isRazorpayLoading } = useRazorpay();
   const createOrder = useCreateOrder();
+  const markOrderPaid = useMarkOrderPaid();
   const { data: storeSettings } = useStoreSettings();
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -157,25 +158,29 @@ const Checkout = () => {
 
     try {
       if (paymentMethod === "razorpay") {
+        // Persist the order as pending *before* taking money, so a payment can
+        // never end up with no matching order if the browser dies mid-flow.
+        const pendingOrder = await createOrder.mutateAsync(orderData);
+
         await initiatePayment({
-          amount: Math.round(total * 100),
           receipt: orderNumber,
           name: `${formData.firstName} ${formData.lastName}`,
           email: formData.email,
           contact: formData.phone,
-          onSuccess: async () => {
+          onSuccess: async (response) => {
             try {
-              await createOrder.mutateAsync({
-                ...orderData,
-                payment_status: "paid",
+              await markOrderPaid.mutateAsync({
+                orderId: pendingOrder.id,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
               });
               clearCart();
-              navigate("/order-success");
+              navigate("/order-success", { state: { orderNumber } });
             } catch (error) {
-              console.error("Error creating order:", error);
+              console.error("Error finalising order:", error);
               toast({
-                title: "Order Error",
-                description: `Payment successful but failed to save order. Please contact support with order ID: ${orderNumber}.`,
+                title: "Payment Received",
+                description: `Payment successful, but we couldn't update your order automatically. Please contact support with order ID: ${orderNumber}.`,
                 variant: "destructive",
               });
             }
@@ -191,22 +196,26 @@ const Checkout = () => {
           },
           onDismiss: () => {
             setIsProcessing(false);
+            toast({
+              title: "Payment Cancelled",
+              description: "Your order is saved as pending. You can retry the payment anytime.",
+            });
           },
         });
         return;
       } else {
         // Cash on Delivery - create order directly
         await createOrder.mutateAsync(orderData);
-        
+
         clearCart();
         setIsProcessing(false);
-        
+
         toast({
           title: "🎉 Order Placed Successfully!",
           description: "Thank you for your order. You'll receive a confirmation shortly.",
         });
-        
-        navigate("/order-success");
+
+        navigate("/order-success", { state: { orderNumber } });
       }
     } catch (error) {
       console.error("Error placing order:", error);
