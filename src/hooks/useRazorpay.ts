@@ -64,6 +64,33 @@ const normalizeError = (error: unknown) => {
   return new Error("Razorpay payment failed. Please try again.");
 };
 
+/**
+ * supabase.functions.invoke reports every non-2xx as the opaque
+ * "Edge Function returned a non-2xx status code". The useful reason is in the
+ * response body, so read it off the attached context when available.
+ */
+const describeFunctionError = async (error: unknown, fallback: string): Promise<string> => {
+  const context = (error as { context?: unknown })?.context;
+
+  if (context instanceof Response) {
+    try {
+      const body = await context.clone().json();
+      if (typeof body?.error === "string" && body.error.trim()) {
+        return body.error;
+      }
+    } catch {
+      // Body was not JSON; fall through to the generic message.
+    }
+  }
+
+  const message = (error as { message?: string })?.message;
+  if (message && !message.includes("non-2xx status code")) {
+    return message;
+  }
+
+  return fallback;
+};
+
 const loadRazorpayScript = (): Promise<boolean> => {
   return new Promise((resolve) => {
     if (window.Razorpay) {
@@ -109,7 +136,7 @@ export const useRazorpay = (): UseRazorpayReturn => {
       );
 
       if (orderError) {
-        throw new Error(orderError.message || "Failed to initiate Razorpay payment.");
+        throw new Error(await describeFunctionError(orderError, "Failed to initiate Razorpay payment."));
       }
 
       if (!orderData?.order_id) {
@@ -141,7 +168,11 @@ export const useRazorpay = (): UseRazorpayReturn => {
             );
 
             if (verifyError || !verifyData?.verified) {
-              throw new Error(verifyError?.message || "Payment verification failed.");
+              throw new Error(
+                verifyError
+                  ? await describeFunctionError(verifyError, "Payment verification failed.")
+                  : "Payment verification failed."
+              );
             }
 
             await options.onSuccess(response);

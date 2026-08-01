@@ -104,36 +104,53 @@ Deno.serve(async (req) => {
     const config = getRazorpayConfig();
     const amount = await resolveAmountInPaise(payload.receipt);
 
-    const response = await fetch("https://api.razorpay.com/v1/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: getRazorpayAuthHeader(config),
-      },
-      body: JSON.stringify({
-        amount,
-        currency: "INR",
-        receipt: payload.receipt,
-      }),
-    });
-
-    const responseBodyText = await response.text();
+    // Razorpay intermittently rejects valid credentials with a transient
+    // "Authentication failed", so retry a couple of times before giving up.
+    // A failed attempt never creates an order, so retrying is safe.
+    const MAX_ATTEMPTS = 3;
     let razorpayResponse: { id?: string; amount?: number; currency?: string; error?: { description?: string } } | null =
       null;
-    try {
-      razorpayResponse = JSON.parse(responseBodyText);
-    } catch {
-      // No-op: handled below with response text.
-    }
+    let lastFailure = "";
 
-    if (!response.ok) {
-      throw new Error(
-        razorpayResponse?.error?.description || `Razorpay create order failed with status ${response.status}: ${responseBodyText}`
-      );
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const response = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: getRazorpayAuthHeader(config),
+        },
+        body: JSON.stringify({
+          amount,
+          currency: "INR",
+          receipt: payload.receipt,
+        }),
+      });
+
+      const responseBodyText = await response.text();
+      let parsed: typeof razorpayResponse = null;
+      try {
+        parsed = JSON.parse(responseBodyText);
+      } catch {
+        // Non-JSON response is reported via responseBodyText below.
+      }
+
+      if (response.ok && parsed?.id) {
+        razorpayResponse = parsed;
+        break;
+      }
+
+      lastFailure =
+        parsed?.error?.description ||
+        `Razorpay create order failed with status ${response.status}: ${responseBodyText}`;
+      console.error(`razorpay-create-order attempt ${attempt}/${MAX_ATTEMPTS} failed: ${lastFailure}`);
+
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+      }
     }
 
     if (!razorpayResponse?.id) {
-      throw new Error("Razorpay did not return an order id.");
+      throw new Error(lastFailure || "Razorpay did not return an order id.");
     }
 
     return new Response(
