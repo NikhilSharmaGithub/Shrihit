@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useStoreSettings, useUpdateStoreSettings } from "@/hooks/useStoreSettings";
 import { DEFAULT_STORE_SETTINGS, StoreSettings } from "@/lib/store-settings";
@@ -26,15 +25,6 @@ const Settings = () => {
   const isSaving = updateSettings.isPending;
 
   const handleSaveSettings = async () => {
-    if (!formData.cod_enabled && !formData.razorpay_enabled) {
-      toast({
-        title: "Invalid Configuration",
-        description: "At least one payment method (COD or Razorpay) must remain enabled.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (formData.free_shipping_threshold < 0 || formData.shipping_cost < 0) {
       toast({
         title: "Invalid Shipping Values",
@@ -195,20 +185,6 @@ const Settings = () => {
                 </div>
               </div>
 
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Cash on Delivery</Label>
-                    <p className="text-sm text-muted-foreground">Allow customers to pay on delivery</p>
-                  </div>
-                  <Switch
-                    checked={formData.cod_enabled}
-                    onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, cod_enabled: checked }))}
-                  />
-                </div>
-              </div>
             </div>
           </div>
 

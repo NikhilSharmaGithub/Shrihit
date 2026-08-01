@@ -8,7 +8,6 @@ export interface StoreSettings {
   whatsapp_number: string;
   free_shipping_threshold: number;
   shipping_cost: number;
-  cod_enabled: boolean;
   razorpay_enabled: boolean;
 }
 
@@ -22,7 +21,6 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   whatsapp_number: "+919876543210",
   free_shipping_threshold: 999,
   shipping_cost: 99,
-  cod_enabled: true,
   razorpay_enabled: true,
 };
 

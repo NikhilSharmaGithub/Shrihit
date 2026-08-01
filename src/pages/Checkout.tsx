@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, Smartphone, Wallet, Truck, ShieldCheck, Check, Loader2 } from "lucide-react";
+import { ChevronLeft, Smartphone, Truck, ShieldCheck, Check, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
@@ -26,7 +25,6 @@ const Checkout = () => {
   const { data: storeSettings } = useStoreSettings();
   
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("cod");
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -42,20 +40,8 @@ const Checkout = () => {
   const shippingCost = storeSettings?.shipping_cost ?? 99;
   const shipping = subtotal >= shippingThreshold ? 0 : shippingCost;
   const total = subtotal + shipping;
-  const codEnabled = storeSettings?.cod_enabled ?? true;
   const razorpayEnabled = storeSettings?.razorpay_enabled ?? true;
-  const noPaymentMethodEnabled = !codEnabled && !razorpayEnabled;
-
-  useEffect(() => {
-    if (paymentMethod === "cod" && !codEnabled && razorpayEnabled) {
-      setPaymentMethod("razorpay");
-      return;
-    }
-
-    if (paymentMethod === "razorpay" && !razorpayEnabled && codEnabled) {
-      setPaymentMethod("cod");
-    }
-  }, [codEnabled, razorpayEnabled, paymentMethod]);
+  const noPaymentMethodEnabled = !razorpayEnabled;
 
   const addMoreForFreeShipping = useMemo(() => {
     if (shipping === 0) {
@@ -88,25 +74,7 @@ const Checkout = () => {
     if (noPaymentMethodEnabled) {
       toast({
         title: "Payment Unavailable",
-        description: "No payment method is currently enabled. Please contact support.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (paymentMethod === "cod" && !codEnabled) {
-      toast({
-        title: "COD Disabled",
-        description: "Cash on Delivery is currently disabled by admin.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (paymentMethod === "razorpay" && !razorpayEnabled) {
-      toast({
-        title: "Online Payment Disabled",
-        description: "Online payment is currently disabled by admin.",
+        description: "Online payment is currently disabled. Please contact support.",
         variant: "destructive",
       });
       return;
@@ -134,7 +102,7 @@ const Checkout = () => {
 
     const orderData = {
       order_number: orderNumber,
-      payment_method: paymentMethod === "razorpay" ? "razorpay" : "cod",
+      payment_method: "razorpay",
       payment_status: "pending",
       subtotal,
       shipping_cost: shipping,
@@ -157,66 +125,51 @@ const Checkout = () => {
     };
 
     try {
-      if (paymentMethod === "razorpay") {
-        // Persist the order as pending *before* taking money, so a payment can
-        // never end up with no matching order if the browser dies mid-flow.
-        const pendingOrder = await createOrder.mutateAsync(orderData);
+      // Persist the order as pending *before* taking money, so a payment can
+      // never end up with no matching order if the browser dies mid-flow.
+      const pendingOrder = await createOrder.mutateAsync(orderData);
 
-        await initiatePayment({
-          receipt: orderNumber,
-          name: `${formData.firstName} ${formData.lastName}`,
-          email: formData.email,
-          contact: formData.phone,
-          onSuccess: async (response) => {
-            try {
-              await markOrderPaid.mutateAsync({
-                orderId: pendingOrder.id,
-                razorpayOrderId: response.razorpay_order_id,
-                razorpayPaymentId: response.razorpay_payment_id,
-              });
-              clearCart();
-              navigate("/order-success", { state: { orderNumber } });
-            } catch (error) {
-              console.error("Error finalising order:", error);
-              toast({
-                title: "Payment Received",
-                description: `Payment successful, but we couldn't update your order automatically. Please contact support with order ID: ${orderNumber}.`,
-                variant: "destructive",
-              });
-            }
-            setIsProcessing(false);
-          },
-          onFailure: (error) => {
-            setIsProcessing(false);
+      await initiatePayment({
+        receipt: orderNumber,
+        name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
+        contact: formData.phone,
+        onSuccess: async (response) => {
+          try {
+            await markOrderPaid.mutateAsync({
+              orderId: pendingOrder.id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+            });
+            clearCart();
+            navigate("/order-success", { state: { orderNumber } });
+          } catch (error) {
+            console.error("Error finalising order:", error);
             toast({
-              title: "Payment Failed",
-              description: error.message || "Razorpay payment failed. Please try again.",
+              title: "Payment Received",
+              description: `Payment successful, but we couldn't update your order automatically. Please contact support with order ID: ${orderNumber}.`,
               variant: "destructive",
             });
-          },
-          onDismiss: () => {
-            setIsProcessing(false);
-            toast({
-              title: "Payment Cancelled",
-              description: "Your order is saved as pending. You can retry the payment anytime.",
-            });
-          },
-        });
-        return;
-      } else {
-        // Cash on Delivery - create order directly
-        await createOrder.mutateAsync(orderData);
-
-        clearCart();
-        setIsProcessing(false);
-
-        toast({
-          title: "🎉 Order Placed Successfully!",
-          description: "Thank you for your order. You'll receive a confirmation shortly.",
-        });
-
-        navigate("/order-success", { state: { orderNumber } });
-      }
+          }
+          setIsProcessing(false);
+        },
+        onFailure: (error) => {
+          setIsProcessing(false);
+          toast({
+            title: "Payment Failed",
+            description: error.message || "Razorpay payment failed. Please try again.",
+            variant: "destructive",
+          });
+        },
+        onDismiss: () => {
+          setIsProcessing(false);
+          toast({
+            title: "Payment Cancelled",
+            description: "Your order is saved as pending. You can retry the payment anytime.",
+          });
+        },
+      });
+      return;
     } catch (error) {
       console.error("Error placing order:", error);
       setIsProcessing(false);
@@ -399,41 +352,20 @@ const Checkout = () => {
                   </h2>
                   {noPaymentMethodEnabled && (
                     <p className="text-sm text-destructive mb-4">
-                      Admin ne abhi sab payment methods disable kiye hue hain.
+                      Online payment is currently unavailable. Please contact support.
                     </p>
                   )}
-                  <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
-                    {codEnabled && (
-                      <div className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-colors cursor-pointer ${paymentMethod === "cod" ? "border-primary bg-primary/5" : "border-border"}`}>
-                        <RadioGroupItem value="cod" id="cod" />
-                        <Label htmlFor="cod" className="flex-1 cursor-pointer">
-                          <div className="flex items-center gap-3">
-                            <Wallet className="text-primary" size={24} />
-                            <div>
-                              <p className="font-medium text-foreground">Cash on Delivery</p>
-                              <p className="text-sm text-muted-foreground">Pay when you receive</p>
-                            </div>
-                          </div>
-                        </Label>
+                  {razorpayEnabled && (
+                    <div className="flex items-center space-x-4 p-4 rounded-lg border-2 border-primary bg-primary/5">
+                      <Smartphone className="text-primary" size={24} />
+                      <div>
+                        <p className="font-medium text-foreground">Pay Online (Razorpay)</p>
+                        <p className="text-sm text-muted-foreground">
+                          UPI, Cards, Net Banking, Wallets
+                        </p>
                       </div>
-                    )}
-                    {razorpayEnabled && (
-                      <div className={`flex items-center space-x-4 p-4 rounded-lg border-2 transition-colors cursor-pointer ${paymentMethod === "razorpay" ? "border-primary bg-primary/5" : "border-border"}`}>
-                        <RadioGroupItem value="razorpay" id="razorpay" />
-                        <Label htmlFor="razorpay" className="flex-1 cursor-pointer">
-                          <div className="flex items-center gap-3">
-                            <Smartphone className="text-primary" size={24} />
-                            <div>
-                              <p className="font-medium text-foreground">Pay Online (Razorpay)</p>
-                              <p className="text-sm text-muted-foreground">
-                                UPI, Cards, Net Banking, Wallets
-                              </p>
-                            </div>
-                          </div>
-                        </Label>
-                      </div>
-                    )}
-                  </RadioGroup>
+                    </div>
+                  )}
                 </motion.div>
 
                 {/* Place Order Button - Mobile */}
@@ -450,10 +382,8 @@ const Checkout = () => {
                         <Loader2 size={18} className="animate-spin mr-2" />
                         Processing...
                       </>
-                    ) : paymentMethod === "razorpay" ? (
-                      `Pay ₹${total.toLocaleString()}`
                     ) : (
-                      `Place Order • ₹${total.toLocaleString()}`
+                      `Pay ₹${total.toLocaleString()}`
                     )}
                   </Button>
                 </div>
@@ -534,10 +464,8 @@ const Checkout = () => {
                       <Loader2 size={18} className="animate-spin mr-2" />
                       Processing...
                     </>
-                  ) : paymentMethod === "razorpay" ? (
-                    `Pay ₹${total.toLocaleString()}`
                   ) : (
-                    "Place Order"
+                    `Pay ₹${total.toLocaleString()}`
                   )}
                 </Button>
 
