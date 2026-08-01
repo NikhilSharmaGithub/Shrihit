@@ -80,25 +80,34 @@ const AdminLogin = () => {
         });
 
         if (!isAdmin) {
-          // Try to promote if first admin
-          try {
-            await supabase.rpc("promote_to_admin", { target_email: email });
-            
-            toast({
-              title: "Admin Access Granted!",
-              description: "You've been promoted to admin as the first user.",
-            });
-            navigate("/admin");
-            return;
-          } catch {
+          // Try to promote if first admin. supabase.rpc resolves rather than
+          // throwing on a Postgres error, and the promotion is a no-op unless
+          // it actually took, so both have to be checked before claiming success.
+          const { error: promoteError } = await supabase.rpc("promote_to_admin", {
+            target_email: email,
+          });
+
+          const { data: isAdminAfterPromote } = promoteError
+            ? { data: false }
+            : await supabase.rpc("has_role", { _user_id: data.user.id, _role: "admin" });
+
+          if (promoteError || !isAdminAfterPromote) {
             await supabase.auth.signOut();
             toast({
               title: "Access Denied",
-              description: "You don't have admin privileges. Please contact an administrator.",
+              description:
+                promoteError?.message || "You don't have admin privileges. Please contact an administrator.",
               variant: "destructive",
             });
             return;
           }
+
+          toast({
+            title: "Admin Access Granted!",
+            description: "You've been promoted to admin as the first user.",
+          });
+          navigate("/admin");
+          return;
         }
 
         toast({
