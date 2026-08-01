@@ -61,6 +61,7 @@ interface Product {
   badge: string | null;
   is_active: boolean;
   in_stock: boolean;
+  free_shipping: boolean;
   stock_qty: number;
   images: string[];
   updated_at: string;
@@ -103,6 +104,7 @@ const Products = () => {
     tags: "",
     is_active: true,
     in_stock: true,
+    free_shipping: false,
   });
   const { toast } = useToast();
 
@@ -217,6 +219,7 @@ const Products = () => {
           tags: (data.tags || []).join(", "),
           is_active: data.is_active,
           in_stock: data.in_stock,
+          free_shipping: data.free_shipping ?? false,
         });
       }
     } else {
@@ -242,6 +245,7 @@ const Products = () => {
         tags: "",
         is_active: true,
         in_stock: true,
+        free_shipping: false,
       });
     }
     setIsDialogOpen(true);
@@ -302,6 +306,7 @@ const Products = () => {
       images: uploadedImages,
       is_active: formData.is_active,
       in_stock: formData.in_stock,
+      free_shipping: formData.free_shipping,
     };
 
     if (editingProduct) {
@@ -830,6 +835,14 @@ const Products = () => {
                     onCheckedChange={(checked) => setFormData({ ...formData, in_stock: checked })}
                   />
                   <Label htmlFor="in_stock">In Stock</Label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="free_shipping"
+                    checked={formData.free_shipping}
+                    onCheckedChange={(checked) => setFormData({ ...formData, free_shipping: checked })}
+                  />
+                  <Label htmlFor="free_shipping">Free shipping (no delivery charge)</Label>
                 </div>
               </div>
 

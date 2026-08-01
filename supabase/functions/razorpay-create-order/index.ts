@@ -63,27 +63,52 @@ const resolveAmountInPaise = async (orderNumber: string): Promise<number> => {
   const productIds = [...new Set(order.order_items.map((item) => item.product_id))];
   const productsUrl = new URL(`${supabaseUrl}/rest/v1/products`);
   productsUrl.searchParams.set("id", `in.(${productIds.join(",")})`);
-  productsUrl.searchParams.set("select", "id,price");
+  productsUrl.searchParams.set("select", "id,price,free_shipping");
 
   const productsResponse = await fetch(productsUrl.toString(), { headers });
   if (!productsResponse.ok) {
     throw new Error("Could not verify product pricing.");
   }
 
-  const products = (await productsResponse.json()) as Array<{ id: string; price: number }>;
-  const priceById = new Map(products.map((product) => [product.id, Number(product.price)]));
+  const products = (await productsResponse.json()) as Array<{
+    id: string;
+    price: number;
+    free_shipping: boolean;
+  }>;
+  const productById = new Map(products.map((product) => [product.id, product]));
 
   let itemsTotal = 0;
+  let everyItemShipsFree = true;
   for (const item of order.order_items) {
-    const price = priceById.get(item.product_id);
-    if (price === undefined) {
+    const product = productById.get(item.product_id);
+    if (!product) {
       throw new Error("Order contains a product that no longer exists.");
     }
-    itemsTotal += price * item.quantity;
+    itemsTotal += Number(product.price) * item.quantity;
+    if (!product.free_shipping) {
+      everyItemShipsFree = false;
+    }
   }
 
-  const total = itemsTotal + Number(order.shipping_cost ?? 0);
-  const amountInPaise = Math.round(total * 100);
+  // Shipping is recomputed here too - the client stores shipping_cost on the
+  // order, so trusting it would let a tampered client zero out delivery.
+  const settingsUrl = new URL(`${supabaseUrl}/rest/v1/store_settings`);
+  settingsUrl.searchParams.set("id", "eq.1");
+  settingsUrl.searchParams.set("select", "shipping_cost,free_shipping_threshold");
+
+  const settingsResponse = await fetch(settingsUrl.toString(), { headers });
+  const settings = settingsResponse.ok
+    ? ((await settingsResponse.json())[0] as
+        | { shipping_cost: number; free_shipping_threshold: number }
+        | undefined)
+    : undefined;
+
+  const shippingCost = Number(settings?.shipping_cost ?? 99);
+  const freeShippingThreshold = Number(settings?.free_shipping_threshold ?? 999);
+  const shipping =
+    everyItemShipsFree || itemsTotal >= freeShippingThreshold ? 0 : shippingCost;
+
+  const amountInPaise = Math.round((itemsTotal + shipping) * 100);
 
   if (!Number.isInteger(amountInPaise) || amountInPaise < 100) {
     throw new Error("Resolved order amount is invalid.");

@@ -85,6 +85,7 @@ const ProductDetail = () => {
       originalPrice: product.original_price,
       image: product.images[0] || fallbackImages[0],
       size: selectedSize || undefined,
+      freeShipping: product.free_shipping,
     }, quantity);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 2000);

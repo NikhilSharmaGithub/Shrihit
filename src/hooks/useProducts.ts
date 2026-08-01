@@ -20,6 +20,7 @@ export interface Product {
   sizes: string[];
   in_stock: boolean;
   is_active: boolean;
+  free_shipping: boolean;
   popularity: number;
   created_at: string;
 }

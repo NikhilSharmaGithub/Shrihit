@@ -26,6 +26,7 @@ const FeaturedProducts = () => {
       price: product.price,
       originalPrice: product.original_price,
       image: product.images[0] || fallbackImages[0],
+      freeShipping: product.free_shipping,
     });
   };
 

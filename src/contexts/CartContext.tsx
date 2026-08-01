@@ -8,6 +8,8 @@ export interface CartItem {
   image: string;
   quantity: number;
   size?: string;
+  /** Product ships free; shipping is waived only when every cart item has it. */
+  freeShipping?: boolean;
 }
 
 interface CartContextType {

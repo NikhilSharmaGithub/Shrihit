@@ -38,7 +38,10 @@ const Checkout = () => {
 
   const shippingThreshold = storeSettings?.free_shipping_threshold ?? 999;
   const shippingCost = storeSettings?.shipping_cost ?? 99;
-  const shipping = subtotal >= shippingThreshold ? 0 : shippingCost;
+  // Shipping is waived only when every item ships free, so adding one
+  // free-shipping product cannot make an entire mixed cart ship free.
+  const allItemsShipFree = items.length > 0 && items.every((item) => item.freeShipping);
+  const shipping = allItemsShipFree || subtotal >= shippingThreshold ? 0 : shippingCost;
   const total = subtotal + shipping;
   const razorpayEnabled = storeSettings?.razorpay_enabled ?? true;
   const noPaymentMethodEnabled = !razorpayEnabled;

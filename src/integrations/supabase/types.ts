@@ -352,6 +352,7 @@ export type Database = {
           description: string | null
           dimensions: string | null
           features: string[] | null
+          free_shipping: boolean
           id: string
           images: string[] | null
           in_stock: boolean
@@ -378,6 +379,7 @@ export type Database = {
           description?: string | null
           dimensions?: string | null
           features?: string[] | null
+          free_shipping?: boolean
           id?: string
           images?: string[] | null
           in_stock?: boolean
@@ -404,6 +406,7 @@ export type Database = {
           description?: string | null
           dimensions?: string | null
           features?: string[] | null
+          free_shipping?: boolean
           id?: string
           images?: string[] | null
           in_stock?: boolean
