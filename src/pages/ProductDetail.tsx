@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCart } from "@/contexts/CartContext";
 import { useProduct, useRelatedProducts, useCategories } from "@/hooks/useProducts";
+import { useReviews, summariseReviews } from "@/hooks/useReviews";
+import ProductReviews from "@/components/ProductReviews";
+import Seo from "@/components/Seo";
 
 // Fallback images
 import productThali from "@/assets/product-thali.jpg";
@@ -22,6 +25,8 @@ const ProductDetail = () => {
   const { data: product, isLoading, error } = useProduct(id || "");
   const { data: categories } = useCategories();
   const { data: relatedProducts } = useRelatedProducts(id || "", product?.category_id || null);
+  const { data: reviews } = useReviews(id);
+  const ratingSummary = summariseReviews(reviews);
   const { addItem } = useCart();
 
   const [selectedImage, setSelectedImage] = useState(0);
@@ -99,6 +104,11 @@ const ProductDetail = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title={`${product.name} | Shrihit`}
+        description={product.short_description || product.description || `Buy ${product.name} online at Shrihit.`}
+        image={product.images[0]}
+      />
       <Header />
 
       <main className="pt-24 md:pt-28 pb-16">
@@ -195,20 +205,29 @@ const ProductDetail = () => {
               )}
 
               {/* Rating */}
-              <div className="flex items-center gap-2 mb-6">
-                <div className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      size={16}
-                      className={i < 4 ? "fill-primary text-primary" : "text-muted-foreground"}
-                    />
-                  ))}
+              {ratingSummary.count > 0 ? (
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        size={16}
+                        className={
+                          star <= Math.round(ratingSummary.average)
+                            ? "fill-primary text-primary"
+                            : "text-muted-foreground/40"
+                        }
+                      />
+                    ))}
+                  </div>
+                  <span className="font-body text-sm text-muted-foreground">
+                    {ratingSummary.average.toFixed(1)} ({ratingSummary.count}{" "}
+                    {ratingSummary.count === 1 ? "review" : "reviews"})
+                  </span>
                 </div>
-                <span className="font-body text-sm text-muted-foreground">
-                  4.8 (127 reviews)
-                </span>
-              </div>
+              ) : (
+                <p className="font-body text-sm text-muted-foreground mb-6">No reviews yet</p>
+              )}
 
               {/* Price */}
               <div className="flex items-baseline gap-3 mb-6">
@@ -419,6 +438,10 @@ const ProductDetail = () => {
               </div>
             </section>
           )}
+
+          <div className="mt-16">
+            <ProductReviews productId={product.id} />
+          </div>
         </div>
       </main>
 

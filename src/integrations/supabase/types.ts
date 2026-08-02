@@ -231,6 +231,8 @@ export type Database = {
           order_number: string
           payment_method: string
           payment_status: string
+          coupon_code: string | null
+          discount_amount: number
           razorpay_order_id: string | null
           razorpay_payment_id: string | null
           shipping_address: Json
@@ -247,6 +249,8 @@ export type Database = {
           order_number: string
           payment_method: string
           payment_status?: string
+          coupon_code?: string | null
+          discount_amount?: number
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
           shipping_address: Json
@@ -263,6 +267,8 @@ export type Database = {
           order_number?: string
           payment_method?: string
           payment_status?: string
+          coupon_code?: string | null
+          discount_amount?: number
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
           shipping_address?: Json
@@ -272,6 +278,93 @@ export type Database = {
           total?: number
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      coupons: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          discount_type: string
+          discount_value: number
+          id: string
+          is_active: boolean
+          max_discount_amount: number | null
+          min_order_amount: number
+          updated_at: string
+          usage_limit: number | null
+          used_count: number
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value: number
+          id?: string
+          is_active?: boolean
+          max_discount_amount?: number | null
+          min_order_amount?: number
+          updated_at?: string
+          usage_limit?: number | null
+          used_count?: number
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          id?: string
+          is_active?: boolean
+          max_discount_amount?: number | null
+          min_order_amount?: number
+          updated_at?: string
+          usage_limit?: number | null
+          used_count?: number
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: []
+      }
+      reviews: {
+        Row: {
+          author_name: string
+          comment: string | null
+          created_at: string
+          id: string
+          product_id: string
+          rating: number
+          updated_at: string
+          user_id: string
+          verified_purchase: boolean
+        }
+        Insert: {
+          author_name?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          product_id: string
+          rating: number
+          updated_at?: string
+          user_id: string
+          verified_purchase?: boolean
+        }
+        Update: {
+          author_name?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          product_id?: string
+          rating?: number
+          updated_at?: string
+          user_id?: string
+          verified_purchase?: boolean
         }
         Relationships: []
       }
@@ -291,6 +384,10 @@ export type Database = {
           phonepe_enabled_payment_modes: string[]
           phonepe_mode: string
           razorpay_enabled: boolean
+          instagram_url: string
+          facebook_url: string
+          twitter_url: string
+          youtube_url: string
           shipping_cost: number
           store_name: string
           tagline: string
@@ -313,6 +410,10 @@ export type Database = {
           phonepe_enabled_payment_modes?: string[]
           phonepe_mode?: string
           razorpay_enabled?: boolean
+          instagram_url?: string
+          facebook_url?: string
+          twitter_url?: string
+          youtube_url?: string
           shipping_cost?: number
           store_name?: string
           tagline?: string
@@ -335,6 +436,10 @@ export type Database = {
           phonepe_enabled_payment_modes?: string[]
           phonepe_mode?: string
           razorpay_enabled?: boolean
+          instagram_url?: string
+          facebook_url?: string
+          twitter_url?: string
+          youtube_url?: string
           shipping_cost?: number
           store_name?: string
           tagline?: string
@@ -497,6 +602,14 @@ export type Database = {
         Returns: boolean
       }
       promote_to_admin: { Args: { target_email: string }; Returns: undefined }
+      validate_coupon: {
+        Args: { _code: string; _subtotal: number }
+        Returns: {
+          valid: boolean
+          discount: number
+          reason: string | null
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "customer"

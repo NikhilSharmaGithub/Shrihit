@@ -9,6 +9,10 @@ export interface StoreSettings {
   free_shipping_threshold: number;
   shipping_cost: number;
   razorpay_enabled: boolean;
+  instagram_url: string;
+  facebook_url: string;
+  twitter_url: string;
+  youtube_url: string;
 }
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
@@ -22,6 +26,10 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   free_shipping_threshold: 999,
   shipping_cost: 99,
   razorpay_enabled: true,
+  instagram_url: "",
+  facebook_url: "",
+  twitter_url: "",
+  youtube_url: "",
 };
 
 export const normalizeStoreSettings = (settings: Partial<StoreSettings> | null | undefined): StoreSettings => ({

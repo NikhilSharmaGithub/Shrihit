@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CartProvider } from "@/contexts/CartContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
 import CartDrawer from "@/components/CartDrawer";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import Index from "./pages/Index";
 import Collections from "./pages/Collections";
@@ -24,6 +25,7 @@ import Dashboard from "./pages/admin/Dashboard";
 import Categories from "./pages/admin/Categories";
 import Products from "./pages/admin/Products";
 import Orders from "./pages/admin/Orders";
+import Coupons from "./pages/admin/Coupons";
 import ActivityLog from "./pages/admin/ActivityLog";
 import Settings from "./pages/admin/Settings";
 import BlogPosts from "./pages/admin/BlogPosts";
@@ -33,6 +35,10 @@ import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import Careers from "./pages/Careers";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import ShippingPolicy from "./pages/ShippingPolicy";
+import RefundPolicy from "./pages/RefundPolicy";
+import Terms from "./pages/Terms";
+import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -72,6 +78,10 @@ const AnimatedRoutes = () => {
           <Route path="/blog/:slug" element={<BlogPost />} />
           <Route path="/careers" element={<Careers />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/shipping-policy" element={<ShippingPolicy />} />
+          <Route path="/refund-policy" element={<RefundPolicy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/contact" element={<Contact />} />
 
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
@@ -80,6 +90,7 @@ const AnimatedRoutes = () => {
             <Route path="categories" element={<Categories />} />
             <Route path="products" element={<Products />} />
             <Route path="orders" element={<Orders />} />
+            <Route path="coupons" element={<Coupons />} />
             <Route path="blog" element={<BlogPosts />} />
             <Route path="activity" element={<ActivityLog />} />
             <Route path="settings" element={<Settings />} />
@@ -94,7 +105,8 @@ const AnimatedRoutes = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
     <CartProvider>
       <WishlistProvider>
         <TooltipProvider>
@@ -109,7 +121,8 @@ const App = () => (
         </TooltipProvider>
       </WishlistProvider>
     </CartProvider>
-  </QueryClientProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

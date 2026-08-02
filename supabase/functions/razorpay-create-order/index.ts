@@ -33,7 +33,10 @@ const resolveAmountInPaise = async (orderNumber: string): Promise<number> => {
 
   const orderUrl = new URL(`${supabaseUrl}/rest/v1/orders`);
   orderUrl.searchParams.set("order_number", `eq.${orderNumber}`);
-  orderUrl.searchParams.set("select", "id,shipping_cost,payment_status,order_items(product_id,quantity)");
+  orderUrl.searchParams.set(
+    "select",
+    "id,shipping_cost,payment_status,coupon_code,order_items(product_id,quantity)"
+  );
 
   const orderResponse = await fetch(orderUrl.toString(), { headers });
   if (!orderResponse.ok) {
@@ -44,6 +47,7 @@ const resolveAmountInPaise = async (orderNumber: string): Promise<number> => {
     id: string;
     shipping_cost: number;
     payment_status: string;
+    coupon_code: string | null;
     order_items: Array<{ product_id: string; quantity: number }>;
   }>;
 
@@ -108,7 +112,28 @@ const resolveAmountInPaise = async (orderNumber: string): Promise<number> => {
   const shipping =
     everyItemShipsFree || itemsTotal >= freeShippingThreshold ? 0 : shippingCost;
 
-  const amountInPaise = Math.round((itemsTotal + shipping) * 100);
+  // Re-validate the coupon here as well. The client writes coupon_code and
+  // discount_amount onto the order, so charging from the stored discount would
+  // let anyone invent one.
+  let discount = 0;
+  if (order.coupon_code) {
+    const rpcResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/validate_coupon`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ _code: order.coupon_code, _subtotal: itemsTotal }),
+    });
+
+    if (rpcResponse.ok) {
+      const rows = (await rpcResponse.json()) as Array<{ valid: boolean; discount: number }>;
+      const result = Array.isArray(rows) ? rows[0] : rows;
+      if (result?.valid) {
+        discount = Number(result.discount) || 0;
+      }
+    }
+  }
+
+  const payable = Math.max(0, itemsTotal + shipping - discount);
+  const amountInPaise = Math.round(payable * 100);
 
   if (!Number.isInteger(amountInPaise) || amountInPaise < 100) {
     throw new Error("Resolved order amount is invalid.");

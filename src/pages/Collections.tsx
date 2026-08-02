@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, ShoppingBag, Filter, X, Grid3X3, LayoutList } from "lucide-react";
+import Seo from "@/components/Seo";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -179,6 +180,10 @@ const Collections = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Seo
+        title="Shop All Pooja Essentials | Shrihit"
+        description="Browse our full collection of brass pooja items, diyas, incense, malas and curated gift sets. Free shipping available."
+      />
       <Header />
 
       {/* Hero Banner */}

@@ -11,9 +11,11 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
 import { useRazorpay } from "@/hooks/useRazorpay";
+import { useCoupon } from "@/hooks/useCoupon";
 import { useCreateOrder, useMarkOrderPaid } from "@/hooks/useOrders";
 import { useStoreSettings } from "@/hooks/useStoreSettings";
 import { supabase } from "@/integrations/supabase/client";
+import Seo from "@/components/Seo";
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useCart();
@@ -22,6 +24,8 @@ const Checkout = () => {
   const { initiatePayment, isLoading: isRazorpayLoading } = useRazorpay();
   const createOrder = useCreateOrder();
   const markOrderPaid = useMarkOrderPaid();
+  const coupon = useCoupon();
+  const [couponInput, setCouponInput] = useState("");
   const { data: storeSettings } = useStoreSettings();
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -42,7 +46,8 @@ const Checkout = () => {
   // free-shipping product cannot make an entire mixed cart ship free.
   const allItemsShipFree = items.length > 0 && items.every((item) => item.freeShipping);
   const shipping = allItemsShipFree || subtotal >= shippingThreshold ? 0 : shippingCost;
-  const total = subtotal + shipping;
+  const discount = coupon.applied?.discount ?? 0;
+  const total = Math.max(0, subtotal + shipping - discount);
   const razorpayEnabled = storeSettings?.razorpay_enabled ?? true;
   const noPaymentMethodEnabled = !razorpayEnabled;
 
@@ -110,6 +115,8 @@ const Checkout = () => {
       subtotal,
       shipping_cost: shipping,
       total,
+      coupon_code: coupon.applied?.code ?? null,
+      discount_amount: discount,
       shipping_address: {
         full_name: `${formData.firstName} ${formData.lastName}`,
         phone: formData.phone,
@@ -425,6 +432,54 @@ const Checkout = () => {
 
                 <Separator className="my-4" />
 
+                {/* Coupon */}
+                <div className="mb-4">
+                  {coupon.applied ? (
+                    <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-green-800 truncate">
+                          {coupon.applied.code} applied
+                        </p>
+                        <p className="text-xs text-green-700">
+                          You saved ₹{coupon.applied.discount.toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          coupon.clear();
+                          setCouponInput("");
+                        }}
+                        className="text-xs text-green-800 underline shrink-0"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <Input
+                          value={couponInput}
+                          onChange={(e) => setCouponInput(e.target.value)}
+                          placeholder="Coupon code"
+                          className="uppercase"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={coupon.isChecking}
+                          onClick={() => coupon.apply(couponInput, subtotal)}
+                        >
+                          {coupon.isChecking ? <Loader2 size={16} className="animate-spin" /> : "Apply"}
+                        </Button>
+                      </div>
+                      {coupon.error && (
+                        <p className="text-xs text-destructive mt-2">{coupon.error}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+
                 {/* Price Breakdown */}
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
@@ -437,6 +492,14 @@ const Checkout = () => {
                       {shipping === 0 ? "FREE" : `₹${shipping}`}
                     </span>
                   </div>
+                  {discount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Discount</span>
+                      <span className="font-medium text-green-600">
+                        −₹{discount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                   {shipping > 0 && (
                     <p className="text-xs text-muted-foreground">
                       Add ₹{addMoreForFreeShipping.toLocaleString()} more for free shipping

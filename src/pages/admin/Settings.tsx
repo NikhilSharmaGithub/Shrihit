@@ -136,6 +136,25 @@ const Settings = () => {
                 />
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {([
+                  ["instagram_url", "Instagram URL"],
+                  ["facebook_url", "Facebook URL"],
+                  ["twitter_url", "Twitter URL"],
+                  ["youtube_url", "YouTube URL"],
+                ] as const).map(([field, label]) => (
+                  <div className="space-y-2" key={field}>
+                    <Label htmlFor={field}>{label}</Label>
+                    <Input
+                      id={field}
+                      value={formData[field]}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, [field]: e.target.value }))}
+                      placeholder="Leave blank to hide this icon"
+                    />
+                  </div>
+                ))}
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="whatsapp">WhatsApp Number</Label>
                 <Input

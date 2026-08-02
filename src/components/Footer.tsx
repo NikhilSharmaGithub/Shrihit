@@ -1,23 +1,40 @@
 import { Instagram, Facebook, Twitter, Youtube, MapPin, Phone, Mail, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useCategories } from "@/hooks/useProducts";
+import { useStoreSettings } from "@/hooks/useStoreSettings";
 import shrihitLogo from "@/assets/shrihit-logo.jpg";
 
 const Footer = () => {
+  const { data: categories } = useCategories();
+  const { data: storeSettings } = useStoreSettings();
+
+  // Only render icons the admin has actually configured, so we never ship a
+  // link that goes nowhere.
+  const socialLinks = [
+    { Icon: Instagram, href: storeSettings?.instagram_url, label: "Instagram" },
+    { Icon: Facebook, href: storeSettings?.facebook_url, label: "Facebook" },
+    { Icon: Twitter, href: storeSettings?.twitter_url, label: "Twitter" },
+    { Icon: Youtube, href: storeSettings?.youtube_url, label: "YouTube" },
+  ].filter((link): link is { Icon: typeof Instagram; href: string; label: string } =>
+    Boolean(link.href && link.href.trim())
+  );
+
   const footerLinks = {
+    // Built from the real catalogue so these never point at a category that
+    // does not exist.
     shop: [
-      { name: "All Products", href: "#" },
-      { name: "Brass Items", href: "#" },
-      { name: "Diyas & Lamps", href: "#" },
-      { name: "Incense & Dhoop", href: "#" },
-      { name: "Pooja Thalis", href: "#" },
-      { name: "Gift Sets", href: "#" },
+      { name: "All Products", href: "/collections" },
+      ...(categories ?? []).slice(0, 5).map((category) => ({
+        name: category.name,
+        href: `/collections?category=${category.slug}`,
+      })),
     ],
     help: [
-      { name: "Track Order", href: "#" },
-      { name: "Shipping Policy", href: "#" },
-      { name: "Returns & Exchange", href: "#" },
-      { name: "FAQs", href: "#" },
-      { name: "Contact Us", href: "#" },
+      { name: "Track Order", href: "/account" },
+      { name: "Shipping Policy", href: "/shipping-policy" },
+      { name: "Returns & Refunds", href: "/refund-policy" },
+      { name: "Terms & Conditions", href: "/terms" },
+      { name: "Contact Us", href: "/contact" },
     ],
     company: [
       { name: "About Us", href: "/about" },
@@ -46,17 +63,22 @@ const Footer = () => {
               Premium pooja essentials for the modern devotee. 
               Authentic products, blessed service, doorstep delivery.
             </p>
-            <div className="flex gap-4">
-              {[Instagram, Facebook, Twitter, Youtube].map((Icon, index) => (
-                <a
-                  key={index}
-                  href="#"
-                  className="w-10 h-10 rounded-full bg-background/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
-                >
-                  <Icon size={18} />
-                </a>
-              ))}
-            </div>
+            {socialLinks.length > 0 && (
+              <div className="flex gap-4">
+                {socialLinks.map(({ Icon, href, label }) => (
+                  <a
+                    key={label}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={label}
+                    className="w-10 h-10 rounded-full bg-background/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
+                  >
+                    <Icon size={18} />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Shop Links */}
