@@ -9,6 +9,8 @@ import { CartProvider } from "@/contexts/CartContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
 import CartDrawer from "@/components/CartDrawer";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import SiteGate from "@/components/SiteGate";
+import { SiteGateProvider } from "@/contexts/SiteGateContext";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import Index from "./pages/Index";
 import Collections from "./pages/Collections";
@@ -112,12 +114,16 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <SiteGateProvider>
+          <SiteGate>
           <BrowserRouter>
             <CartDrawer />
             <WhatsAppButton />
             <ScrollToTop />
             <AnimatedRoutes />
           </BrowserRouter>
+          </SiteGate>
+          </SiteGateProvider>
         </TooltipProvider>
       </WishlistProvider>
     </CartProvider>
